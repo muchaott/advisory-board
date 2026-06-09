@@ -88,6 +88,22 @@ launchctl kickstart -k gui/$(id -u)/com.mtang.advisory-board.weekly  # run now
 
 Or keep it resident instead of launchd: `./.venv/bin/python scheduler.py --daemon`.
 
+### Delivery (Slack + email)
+
+The weekly review is also pushed to Slack and/or email (`deliver.py`), so you
+don't have to remember to open the file. Both are opt-in via `.env` and skipped
+if unconfigured — the job never fails on a missing secret.
+
+- **Slack** — set `SLACK_WEBHOOK_URL` (an incoming webhook), or `SLACK_BOT_TOKEN`
+  + `SLACK_CHANNEL`.
+- **Email** — set `EMAIL_TO` + `SMTP_HOST` (Gmail: `smtp.gmail.com`, `SMTP_PASS`
+  = a Google App Password). `SMTP_TLS_NOVERIFY=1` is an escape hatch if corp TLS
+  interception breaks cert verification.
+
+Delivery is intentionally **not** wired to Claude's Gmail/Slack OAuth — those
+tokens refresh through Claude Code and a cron job sharing them could break that
+auth. The job uses its own durable webhook + SMTP credentials instead.
+
 ## Config (`.env`)
 
 | Var | Default | Notes |

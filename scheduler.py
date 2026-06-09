@@ -30,11 +30,19 @@ REVIEWS_DIR = ROOT / "reviews"
 
 
 def write_review() -> Path:
-    """Run the review and save it to reviews/weekly-<date>.md. Returns the path."""
+    """Run the review, save it, and deliver to Slack/email. Returns the path."""
     out = run_weekly_review()
     REVIEWS_DIR.mkdir(exist_ok=True)
-    path = REVIEWS_DIR / f"weekly-{datetime.now().strftime('%Y-%m-%d')}.md"
+    today = datetime.now().strftime("%Y-%m-%d")
+    path = REVIEWS_DIR / f"weekly-{today}.md"
     path.write_text(out, encoding="utf-8")
+    try:
+        import deliver as D
+        results = D.deliver(f"[Advisory Board] Weekly Review — {today}", out, link=str(path))
+        for chan, status in results:
+            print(f"[deliver] {chan}: {status}")
+    except Exception as e:
+        print(f"[deliver] error: {type(e).__name__}: {e}")
     return path
 
 
