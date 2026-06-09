@@ -1,0 +1,7 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+docs/brag-doc.md
+.last_weekly_summary.md
+reviews/
