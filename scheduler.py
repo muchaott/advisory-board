@@ -67,6 +67,15 @@ def _pm_weekly_summary(since) -> str:
 
 
 def run_weekly_review() -> str:
+    # Best-effort refresh of synced Google Docs (e.g. the 1:1 with Nathan).
+    # Safe + non-fatal: if the Google token is stale, the last synced copy is used.
+    try:
+        import sync_gdoc
+        for fname, status in sync_gdoc.sync_all():
+            print(f"[sync] {fname}: {status}")
+    except Exception as e:
+        print(f"[sync] error (using last copy): {type(e).__name__}: {e}")
+
     today = datetime.now().date()
     since = today - timedelta(days=7)  # last Thursday, on a Thursday cadence
     summary = _pm_weekly_summary(since)

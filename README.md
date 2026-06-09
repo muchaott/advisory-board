@@ -62,6 +62,26 @@ Drop PRDs, research, and your Brag Doc into `./docs` (Markdown/txt). The
 read-access agents get them as context. The PM appends categorized, dated
 bullets to `docs/brag-doc.md` whenever you run `/brag`.
 
+### Syncing a living Google Doc (e.g. the 1:1)
+
+`sync_gdoc.py` pulls configured Google Docs into `./docs` so the agents read the
+latest version. Set `GDOC_1ON1_ID` (→ `docs/1on1-nathan.md`) or `GDOC_SYNC`
+(`docId:file.md, ...`) in `.env`.
+
+```bash
+./.venv/bin/python sync_gdoc.py     # refresh now
+```
+
+The weekly review also runs this best-effort before generating. Notes:
+
+- **Read-only + safe:** it only reads the google-docs token Claude Code already
+  keeps in the keychain — never refreshes/writes it — so it can't break Claude's
+  MCP auth. If the token is stale, the last synced copy is used.
+- **Private:** synced personal docs (the 1:1) are gitignored, never pushed.
+- **Freshness:** the token is usually valid right after you've used Claude. For a
+  guaranteed-fresh Thursday review, run `sync_gdoc.py` after your Wednesday
+  update (or just ask Claude to "sync my 1:1").
+
 ## Weekly review (scheduling)
 
 Runs every **Thursday 09:00 local** via launchd
