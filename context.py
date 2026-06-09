@@ -8,7 +8,8 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime
+import re
+from datetime import date, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -39,6 +40,53 @@ def load_docs() -> str:
     if len(blob) > MAX_CHARS:
         blob = blob[:MAX_CHARS] + "\n\n[...truncated...]"
     return blob
+
+
+_DATED = re.compile(r"^- \((\d{4}-\d{2}-\d{2})\)\s*(.*)$")
+
+
+def recent_brag_entries(since: date) -> list[str]:
+    """Brag Doc bullets dated on/after `since`, tagged with their section."""
+    if not BRAG_PATH.exists():
+        return []
+    out, section = [], None
+    for line in BRAG_PATH.read_text(encoding="utf-8").splitlines():
+        if line.startswith("## "):
+            section = line[3:].strip()
+        m = _DATED.match(line.strip())
+        if m:
+            try:
+                d = datetime.strptime(m.group(1), "%Y-%m-%d").date()
+            except ValueError:
+                continue
+            if d >= since:
+                out.append(f"[{section}] ({m.group(1)}) {m.group(2)}".strip())
+    return out
+
+
+def recent_docs(since: date) -> list[str]:
+    """Working-doc files (excluding the Brag Doc) modified on/after `since`."""
+    res = []
+    if not DOCS_DIR.exists():
+        return res
+    cutoff = datetime.combine(since, datetime.min.time()).timestamp()
+    for p in sorted(DOCS_DIR.rglob("*")):
+        if (p.is_file() and p.suffix.lower() in TEXT_EXT
+                and p.name != "brag-doc.md" and p.stat().st_mtime >= cutoff):
+            res.append(str(p.relative_to(DOCS_DIR)))
+    return res
+
+
+def recent_activity(since: date) -> str:
+    """A compact 'what happened since `since`' block for the weekly summary."""
+    brag = recent_brag_entries(since)
+    docs = recent_docs(since)
+    parts = []
+    parts.append("Brag Doc entries logged in this window:\n"
+                 + ("\n".join("  - " + b for b in brag) if brag else "  (none)"))
+    parts.append("Working docs created/updated in this window:\n"
+                 + ("\n".join("  - " + d for d in docs) if docs else "  (none)"))
+    return "\n\n".join(parts)
 
 
 SECTIONS = {

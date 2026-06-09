@@ -64,19 +64,29 @@ bullets to `docs/brag-doc.md` whenever you run `/brag`.
 
 ## Weekly review (scheduling)
 
-Nothing schedules itself. Run on demand:
+Runs every **Thursday 09:00 local** via launchd
+(`~/Library/LaunchAgents/com.mtang.advisory-board.weekly.plist`), scoped to the
+**last 7 days (since last Thursday)**: the PM summarizes only the important things
+done in that window — dated Brag Doc entries + working docs touched in the window —
+then the Mentor reviews it. Output saved to `reviews/weekly-<date>.md`
+(log: `~/Library/Logs/advisory-board-weekly.log`).
+
+Run on demand / test:
 
 ```bash
-./.venv/bin/python scheduler.py          # PM summary -> Mentor review, printed
+./.venv/bin/python scheduler.py          # print the windowed review
+./.venv/bin/python scheduler.py --write  # save to reviews/weekly-<date>.md
 ```
 
-Keep it resident (Fridays 16:00 local):
+Manage the scheduled job:
 
 ```bash
-./.venv/bin/python scheduler.py --daemon
+launchctl bootout  gui/$(id -u)/com.mtang.advisory-board.weekly   # disable
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.mtang.advisory-board.weekly.plist  # enable
+launchctl kickstart -k gui/$(id -u)/com.mtang.advisory-board.weekly  # run now
 ```
 
-Or wire `./.venv/bin/python scheduler.py` to cron/launchd for a hands-off setup.
+Or keep it resident instead of launchd: `./.venv/bin/python scheduler.py --daemon`.
 
 ## Config (`.env`)
 

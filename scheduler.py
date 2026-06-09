@@ -8,7 +8,7 @@ too small / where to protect my energy.
 Run modes:
   python scheduler.py            -> run the review once, print it
   python scheduler.py --write    -> run once, save to reviews/weekly-<date>.md (for launchd/cron)
-  python scheduler.py --daemon   -> stay resident, run every Friday 16:00 local
+  python scheduler.py --daemon   -> stay resident, run every Thursday 09:00 local
 
 For a hands-off setup, wire `python scheduler.py` to cron/launchd instead of
 keeping the daemon running. (Off by default -- nothing schedules itself.)
@@ -16,7 +16,7 @@ keeping the daemon running. (Off by default -- nothing schedules itself.)
 from __future__ import annotations
 
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import agents as A
@@ -38,29 +38,41 @@ def write_review() -> Path:
     return path
 
 
-def _pm_weekly_summary() -> str:
+def _pm_weekly_summary(since) -> str:
     pm = A.resolve("pm")
     docs = C.load_docs()
+    activity = C.recent_activity(since)
+    since_str = since.isoformat()
     prompt = (
-        "Produce my WEEKLY SUMMARY for promotion tracking. Using my Brag Doc and working "
-        "docs below, write 3 short sections -- Business Impact, AI Leverage, "
-        "Cross-functional Influence -- each with 2-4 bullets of what actually moved this "
-        "week. End with 'Gaps:' listing what's missing for my L5 narrative.\n\n"
-        f"WORKING DOCS:\n{docs}"
+        "Produce my WEEKLY SUMMARY for promotion tracking, covering ONLY the important "
+        f"things I've done since last Thursday ({since_str}). Focus on what moved in that "
+        "window; treat older work as background only and do not re-summarize it.\n\n"
+        f"WHAT HAPPENED IN THIS WINDOW (since {since_str}):\n{activity}\n\n"
+        "Write 3 short sections -- Business Impact, AI Leverage, Cross-functional "
+        "Influence -- each with the key items from the window (2-4 bullets). Lead with "
+        "impact. If the window is genuinely thin, say so plainly instead of padding. End "
+        "with 'Gaps:' listing what's missing for my L5 narrative.\n\n"
+        f"FULL WORKING DOCS (background context only):\n{docs}"
     )
     return llm.complete(pm.system(docs), [{"role": "user", "content": prompt}],
                         deep=O._deep(pm), max_tokens=1200, temperature=0.4)
 
 
 def run_weekly_review() -> str:
-    summary = _pm_weekly_summary()
+    today = datetime.now().date()
+    since = today - timedelta(days=7)  # last Thursday, on a Thursday cadence
+    summary = _pm_weekly_summary(since)
     LAST_SUMMARY.write_text(summary, encoding="utf-8")
     mentor = A.resolve("mentor")
-    review = O.ask(mentor, "Here is my PM's weekly summary. Give me your weekly review.",
-                   transcript=[("The Design Project Manager (weekly summary)", summary)])
+    review = O.ask(
+        mentor,
+        f"Here is my PM's weekly summary covering my work since last Thursday "
+        f"({since.isoformat()}). Give me your weekly review of this window.",
+        transcript=[("The Design Project Manager (weekly summary)", summary)],
+    )
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M")
     return (
-        f"# Weekly Review -- {stamp}\n\n"
+        f"# Weekly Review -- {stamp}  (window: {since.isoformat()} → {today.isoformat()})\n\n"
         f"## PM Weekly Summary\n{summary}\n\n"
         f"## Career Mentor Review\n{review}\n"
     )
@@ -73,8 +85,8 @@ def _daemon():
     def job():
         print("\n" + run_weekly_review())
 
-    schedule.every().friday.at("16:00").do(job)
-    print("[scheduler] resident; Career Mentor review every Friday 16:00 local. Ctrl-C to stop.")
+    schedule.every().thursday.at("09:00").do(job)
+    print("[scheduler] resident; Career Mentor review every Thursday 09:00 local. Ctrl-C to stop.")
     while True:
         schedule.run_pending()
         time.sleep(30)
