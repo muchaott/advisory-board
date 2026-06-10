@@ -36,6 +36,21 @@ missing or rejected, so you usually only set it once.
 ./.venv/bin/python main.py
 ```
 
+### Launch it like an app
+
+- **Spotlight / Launchpad / Dock:** a clickable **Advisory Board.app** lives in
+  `~/Applications` (opens Terminal and starts the board). Drag it to your Dock.
+- **Double-click file:** `launch-board.command` in this folder.
+- **Terminal alias:** `board` (added to `~/.zshrc`).
+
+Recreate the app launcher anytime:
+
+```bash
+osacompile -o "$HOME/Applications/Advisory Board.app" \
+  -e 'tell application "Terminal" to do script "cd ~/projects/advisory-board && ./.venv/bin/python main.py"'
+```
+
+
 Then talk to the board:
 
 ```
