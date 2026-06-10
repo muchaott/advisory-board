@@ -32,25 +32,29 @@ missing or rejected, so you usually only set it once.
 
 ## Run
 
-```bash
-./.venv/bin/python main.py
-```
+Two interfaces, same backend:
 
-### Launch it like an app
+- **GUI app** (default) — **Advisory Board.app** in `~/Applications` (Spotlight /
+  Launchpad / Dock, roundtable icon). Opens a native window: agents rail · live
+  streaming conversation · activity timeline. Or `gui` alias / `./.venv/bin/python gui.py`.
+- **CLI** — `board` alias, `launch-board.command`, or `./.venv/bin/python main.py`.
 
-- **Spotlight / Launchpad / Dock:** a clickable **Advisory Board.app** lives in
-  `~/Applications` (opens Terminal and starts the board). Drag it to your Dock.
-- **Double-click file:** `launch-board.command` in this folder.
-- **Terminal alias:** `board` (added to `~/.zshrc`).
+### GUI overview
 
-Recreate the app launcher anytime:
+- **Left — agents:** card per agent; cards light up + show "speaking…" as they
+  stream. Mode toggle (Single / Chain / Board) + actions: Morning, Weekly, Sync, Brag.
+- **Center — conversation:** color-coded bubbles stream token-by-token; chain/board
+  show a "↑ reacting to …" connector so you can see the agents build on each other.
+- **Right — activity:** timeline of weekly reviews + brag entries (click to expand).
 
-```bash
-osacompile -o "$HOME/Applications/Advisory Board.app" \
-  -e 'tell application "Terminal" to do script "cd ~/projects/advisory-board && ./.venv/bin/python main.py"'
-cp assets/roundtable.icns "$HOME/Applications/Advisory Board.app/Contents/Resources/applet.icns"
-touch "$HOME/Applications/Advisory Board.app"
-```
+Stack: FastAPI (`server.py`) + SSE streaming over the existing modules, rendered
+by a vanilla-JS dark SPA in `web/`, hosted in a `pywebview` window (`gui.py`,
+auto-falls back to the browser). No agent logic changes — the CLI and scheduled
+jobs are untouched.
+
+Rebuild the GUI app bundle anytime: `osascript`-free, it's a plain bundle whose
+`Contents/MacOS/AdvisoryBoard` runs `./.venv/bin/python gui.py` with
+`assets/roundtable.icns` as the icon.
 
 
 Then talk to the board:
@@ -171,10 +175,16 @@ auth. The job uses its own durable webhook + SMTP credentials instead.
 
 ```
 agents.py        the 6 personas (system prompts + global context)
-llm.py           proxy-configured Claude client (key auto-refresh)
+llm.py           proxy-configured Claude client (complete + stream, key auto-refresh)
 context.py       loads ./docs; PM Brag Doc writer
-orchestrator.py  router + single / chain / boardroom
-main.py          CLI loop
+orchestrator.py  router + single / chain / boardroom (+ run_stream for the GUI)
+morning.py       weekday morning check-in
 scheduler.py     weekly Career Mentor review
+sync_gdoc.py     read-only Google Doc sync (1:1)
+deliver.py       Slack + email delivery
+main.py          CLI loop
+server.py        FastAPI: JSON + SSE API over the modules
+gui.py           pywebview launcher (native window)
+web/             dark SPA (index.html, app.js, styles.css)
 docs/            your working docs + brag-doc.md
 ```

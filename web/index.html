@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Advisory Board</title>
+  <link rel="stylesheet" href="/web/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <span class="brand-title">Advisory Board</span>
+      <span class="brand-sub">L4 → L5 · SoFi</span>
+    </div>
+    <div class="topbar-actions">
+      <button class="act" data-action="morning">☀ Morning</button>
+      <button class="act" data-action="weekly">📅 Weekly review</button>
+      <button class="act" data-action="sync">⟳ Sync 1:1</button>
+      <button class="act" data-action="brag">＋ Brag</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- LEFT: agents -->
+    <aside class="rail">
+      <div class="rail-section">
+        <div class="rail-label">Mode</div>
+        <div class="modes" id="modes">
+          <button class="mode active" data-mode="single">Single</button>
+          <button class="mode" data-mode="chain">Chain</button>
+          <button class="mode" data-mode="board">Board</button>
+        </div>
+        <div class="mode-hint" id="modeHint">Pick one agent, then ask.</div>
+      </div>
+      <div class="rail-section grow">
+        <div class="rail-label">The board</div>
+        <div class="agents" id="agents"></div>
+      </div>
+    </aside>
+
+    <!-- CENTER: conversation -->
+    <section class="center">
+      <div class="conversation" id="conversation">
+        <div class="empty" id="emptyState">
+          <div class="empty-table"></div>
+          <p>Ask the board. Pick a mode and agent on the left, or type
+            <code>@critic …</code>, <code>@strategist &gt; @translator …</code>,
+            or switch to <strong>Board</strong>.</p>
+        </div>
+      </div>
+      <form class="composer" id="composer">
+        <textarea id="input" rows="1" placeholder="Ask the board…  (@critic review this flow: …)"></textarea>
+        <button type="submit" id="send" class="send">▶</button>
+      </form>
+    </section>
+
+    <!-- RIGHT: activity -->
+    <aside class="activity">
+      <div class="rail-label">Activity</div>
+      <div class="timeline" id="timeline"></div>
+    </aside>
+  </main>
+
+  <div class="modal-backdrop" id="modal" hidden>
+    <div class="modal">
+      <div class="modal-head"><span id="modalTitle"></span><button id="modalClose">✕</button></div>
+      <pre id="modalBody"></pre>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts"></div>
+
+  <script src="/web/app.js"></script>
+</body>
+</html>

@@ -42,6 +42,67 @@ def ask(agent: A.Agent, topic: str, transcript: list[tuple[str, str]] | None = N
     return llm.complete(agent.system(docs), [{"role": "user", "content": user}], deep=_deep(agent))
 
 
+# ---- streaming (GUI) -----------------------------------------------------
+
+def _ask_stream(agent: A.Agent, topic: str, transcript: list[tuple[str, str]]):
+    """Yield text deltas for one agent's turn; appends its full reply to transcript."""
+    docs = C.load_docs() if agent.reads_docs else ""
+    user = _build_user(agent, topic, transcript)
+    buf = []
+    for delta in llm.stream(agent.system(docs), [{"role": "user", "content": user}], deep=_deep(agent)):
+        buf.append(delta)
+        yield delta
+    transcript.append((agent.name, "".join(buf)))
+
+
+def run_stream(mode: str, keys: list[str], topic: str):
+    """Drive single/chain/board and yield UI events.
+
+    Events: agent_start{agent,deep}, reacting_to{agent,prior}, token{agent,text},
+            agent_done{agent}, done{}.
+    """
+    transcript: list[tuple[str, str]] = []
+
+    if mode == "single":
+        order = keys[:1]
+        synth = False
+    elif mode == "chain":
+        order = keys
+        synth = False
+    else:  # board
+        order = [k for k in A.BOARD_ORDER if k != "mentor"]
+        synth = True
+
+    for i, key in enumerate(order):
+        agent = A.resolve(key)
+        if not agent:
+            continue
+        yield {"type": "agent_start", "agent": agent.name, "key": agent.key, "deep": _deep(agent)}
+        if i > 0 and transcript:
+            yield {"type": "reacting_to", "agent": agent.name, "prior": transcript[-1][0]}
+        for delta in _ask_stream(agent, topic, transcript):
+            yield {"type": "token", "agent": agent.name, "key": agent.key, "text": delta}
+        yield {"type": "agent_done", "agent": agent.name, "key": agent.key}
+
+    if synth:
+        mentor = A.resolve("mentor")
+        synth_topic = (
+            f"{topic}\n\n[Synthesize the board's discussion above into a clear "
+            f"recommendation: the 1-2 highest-leverage moves for my L5 case, and what to "
+            f"ignore. Name the tradeoffs.]"
+        )
+        label = mentor.name + " (synthesis)"
+        yield {"type": "agent_start", "agent": label, "key": mentor.key, "deep": _deep(mentor)}
+        yield {"type": "reacting_to", "agent": label, "prior": "the board"}
+        docs = C.load_docs()
+        user = _build_user(mentor, synth_topic, transcript)
+        for delta in llm.stream(mentor.system(docs), [{"role": "user", "content": user}], deep=_deep(mentor)):
+            yield {"type": "token", "agent": label, "key": mentor.key, "text": delta}
+        yield {"type": "agent_done", "agent": label, "key": mentor.key}
+
+    yield {"type": "done"}
+
+
 # ---- modes ---------------------------------------------------------------
 
 def single(agent: A.Agent, topic: str) -> list[tuple[str, str]]:

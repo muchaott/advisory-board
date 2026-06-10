@@ -87,3 +87,34 @@ def complete(system: str, messages: list[dict], *, deep: bool = False,
                 continue
             raise
     raise RuntimeError("LLM call failed after key refresh.")
+
+
+def stream(system: str, messages: list[dict], *, deep: bool = False,
+           max_tokens: int = 1500, temperature: float = 0.7):
+    """Yield text deltas for a completion. Retries once with a fresh key on auth error."""
+    model = DEEP_MODEL if deep else DEFAULT_MODEL
+    key = _ensure_key()
+
+    for attempt in range(2):
+        try:
+            with _client(key).messages.stream(
+                model=model,
+                system=system,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            ) as s:
+                for text in s.text_stream:
+                    yield text
+            return
+        except anthropic.AuthenticationError:
+            if attempt == 0:
+                key = _refresh_key() or key
+                continue
+            raise
+        except anthropic.APIStatusError as e:
+            if attempt == 0 and e.status_code in (401, 403):
+                key = _refresh_key() or key
+                continue
+            raise
+    raise RuntimeError("LLM stream failed after key refresh.")
