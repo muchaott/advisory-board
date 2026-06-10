@@ -56,11 +56,23 @@ async function init() {
 
 function renderAgents() {
   const wrap = $("#agents"); wrap.innerHTML = "";
+
+  // "The Whole Board" row — avatar shows all 6 roles
+  const bcard = el("div", "agent board-row"); bcard.dataset.key = "__board__";
+  bcard.style.setProperty("--ac", "#7c8cf8");
+  bcard.append(el("div", "av av-board"));
+  const bmeta = el("div", "agent-meta");
+  bmeta.append(el("div", "agent-name", "The Whole Board"));
+  bmeta.append(el("div", "agent-goal", "All 6 weigh in; the Mentor synthesizes."));
+  bcard.append(bmeta);
+  bcard.onclick = onBoardClick;
+  wrap.append(bcard);
+
   state.agents.forEach((a) => {
     const card = el("div", "agent");
     card.style.setProperty("--ac", color(a.key));
     card.dataset.key = a.key;
-    const av = el("div", "av", INITIALS[a.key] || a.key.slice(0, 2).toUpperCase());
+    const av = el("div", "av"); av.style.background = color(a.key);
     const meta = el("div", "agent-meta");
     meta.append(el("div", "agent-name", a.name.replace(/^The /, "")));
     meta.append(el("div", "agent-goal", a.goal));
@@ -77,20 +89,15 @@ function renderAgents() {
 }
 
 function onAgentClick(key) {
-  if (state.mode === "board") { toast("Board mode uses all agents — just type your question."); return; }
-  if (state.mode === "single") {
-    state.selected = [key]; paintSelection();
-    renderConvo();                                  // show THIS agent's history
-    updateComposerEnabled();                        // enabled unless THIS agent is mid-stream
-    if (!isBusy() && convo().length === 0) startChat(key);  // first time → open the chat
-    else focusComposer();
-    return;
-  }
-  // chain: toggle, preserve order
-  const i = state.selected.indexOf(key);
-  if (i >= 0) state.selected.splice(i, 1); else state.selected.push(key);
-  paintSelection();
-  focusComposer();
+  state.mode = "single"; state.selected = [key];
+  paintSelection(); renderConvo(); updateComposerEnabled();
+  if (!isBusy() && convo().length === 0) startChat(key);
+  else focusComposer();
+}
+
+function onBoardClick() {
+  state.mode = "board"; state.selected = [];
+  paintSelection(); renderConvo(); updateComposerEnabled(); focusComposer();
 }
 
 const OPENER = "Start our session. Based on my current focus, recent work, calendar, and 1:1, " +
@@ -121,23 +128,18 @@ function paintSelection() {
   document.querySelectorAll(".agent").forEach((c) => {
     const k = c.dataset.key;
     c.querySelector(".order-pill")?.remove();
-    const idx = state.selected.indexOf(k);
-    const on = state.mode !== "board" && idx >= 0;
+    const on = (k === "__board__") ? state.mode === "board"
+      : (state.mode !== "board" && state.selected.includes(k));
     c.classList.toggle("selected", on);
-    if (on && state.mode === "chain") c.append(el("div", "order-pill", String(idx + 1)));
+    if (on && state.mode === "chain" && k !== "__board__") {
+      c.append(el("div", "order-pill", String(state.selected.indexOf(k) + 1)));
+    }
   });
 }
 
 // ---------- modes ----------
 function setMode(m) {
   state.mode = m;
-  document.querySelectorAll(".mode").forEach((b) => b.classList.toggle("active", b.dataset.mode === m));
-  const hints = {
-    single: "Click an agent to open that conversation.",
-    chain: "Pick agents in order — each sees the prior replies.",
-    board: "All agents weigh in; the Mentor synthesizes.",
-  };
-  $("#modeHint").textContent = hints[m];
   if (m === "single" && state.selected.length > 1) state.selected = state.selected.slice(0, 1);
   paintSelection();
   renderConvo();
@@ -173,10 +175,10 @@ function emptyStateNode() {
   const wrap = el("div", "empty"); wrap.id = "emptyState";
   wrap.append(el("div", "empty-table"));
   const p = el("p");
-  p.innerHTML = "Pick an agent on the left to open a conversation. Each agent keeps its own history. " +
-    "Type below and press Enter — or drag an image in to add context.";
+  p.innerHTML = "Pick an agent on the left to open a conversation — or <strong>The Whole Board</strong> " +
+    "to hear from all six. Each keeps its own history. Type below and press Enter, or drag an image in.";
   const p2 = el("p", "empty-eg");
-  p2.innerHTML = "Or type <code>@critic …</code>, <code>@strategist &gt; @translator …</code>, or switch to <strong>Board</strong>.";
+  p2.innerHTML = "Chain agents by typing <code>@strategist &gt; @critic &gt; @translator …</code>";
   wrap.append(p, p2);
   return wrap;
 }
@@ -199,8 +201,7 @@ function buildAgentBubble(name, key, reacting, streaming) {
   if (reacting) { const r = el("div", "reacting"); r.innerHTML = `↑ reacting to <b>${escapeHtml(reacting)}</b>`; wrap.append(r); }
   const b = el("div", "bubble");
   const head = el("div", "bubble-head");
-  const av = el("div", "av", INITIALS[key] || key.slice(0, 2).toUpperCase());
-  av.style.background = color(key);
+  const av = el("div", "av"); av.style.background = color(key);
   head.append(av, el("div", "bubble-name", name));
   const body = el("div", "bubble-body" + (streaming ? " streaming" : ""));
   b.append(head, body); wrap.append(b); $("#conversation").append(wrap); scrollDown();
@@ -528,7 +529,6 @@ function toast(msg, err) { const t = el("div", "toast" + (err ? " err" : ""), ms
 // ---------- ui binding ----------
 function autoGrow(t) { t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; }
 function bindUI() {
-  document.querySelectorAll(".mode").forEach((b) => (b.onclick = () => setMode(b.dataset.mode)));
   $("#composer").addEventListener("submit", onSubmit);
   const input = $("#input");
   input.addEventListener("input", () => autoGrow(input));
