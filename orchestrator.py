@@ -27,10 +27,10 @@ def _build_user(agent: A.Agent, topic: str, transcript: list[tuple[str, str]]) -
         return topic
     convo = "\n\n".join(f"{spk}:\n{txt}" for spk, txt in transcript)
     return (
-        f"TOPIC FROM ME:\n{topic}\n\n"
-        f"DISCUSSION SO FAR (other board members):\n{convo}\n\n"
-        f"Now respond as {agent.name}. Engage with what the others said where it's "
-        f"relevant -- agree, build on it, or push back -- but stay in your role. "
+        f"LATEST FROM ME:\n{topic}\n\n"
+        f"EARLIER IN THIS SESSION:\n{convo}\n\n"
+        f"Now respond as {agent.name}. Engage with what was said where it's relevant "
+        f"-- build on it, reference it, or push back -- but stay in your role. "
         f"Be concise and specific."
     )
 
@@ -55,13 +55,14 @@ def _ask_stream(agent: A.Agent, topic: str, transcript: list[tuple[str, str]]):
     transcript.append((agent.name, "".join(buf)))
 
 
-def run_stream(mode: str, keys: list[str], topic: str):
+def run_stream(mode: str, keys: list[str], topic: str, history: list | None = None):
     """Drive single/chain/board and yield UI events.
 
-    Events: agent_start{agent,deep}, reacting_to{agent,prior}, token{agent,text},
-            agent_done{agent}, done{}.
+    `history` (list of [speaker, text]) seeds prior conversation turns so a
+    single-agent chat has memory. Events: agent_start, reacting_to, token,
+    agent_done, done.
     """
-    transcript: list[tuple[str, str]] = []
+    transcript: list[tuple[str, str]] = [(h[0], h[1]) for h in (history or []) if len(h) == 2]
 
     if mode == "single":
         order = keys[:1]

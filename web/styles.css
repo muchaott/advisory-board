@@ -94,6 +94,10 @@ body {
 .empty-table { width: 84px; height: 84px; margin: 0 auto 14px; border-radius: 50%;
   background: radial-gradient(circle at 50% 42%, #c78e5c 0 60%, #e1e8ee 60% 66%, transparent 67%); opacity: .5; }
 
+.divider { display: flex; align-items: center; gap: 10px; color: var(--txt-faint); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; margin: 4px 0; }
+.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.empty-eg { font-size: 12px; margin-top: 8px; opacity: .8; }
+
 .msg { max-width: 86%; }
 .msg.user { align-self: flex-end; background: var(--accent); color: #fff; padding: 9px 13px; border-radius: 13px 13px 4px 13px; }
 .msg.agent { align-self: flex-start; width: 100%; max-width: 100%; }

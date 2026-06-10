@@ -9,7 +9,8 @@ const INITIALS = {
 };
 const color = (k) => COLORS[k] || "#7c8cf8";
 
-const state = { mode: "single", selected: [], agents: [], byName: {}, busy: false, pending: null };
+const state = { mode: "single", selected: [], agents: [], byName: {}, busy: false, pending: null, thread: [] };
+const MAX_THREAD = 12;
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
@@ -49,13 +50,22 @@ function renderAgents() {
 
 function onAgentClick(key) {
   if (state.mode === "board") { toast("Board mode uses all agents — just type your question."); return; }
-  if (state.mode === "single") state.selected = [key];
-  else { // chain: toggle, preserve order
-    const i = state.selected.indexOf(key);
-    if (i >= 0) state.selected.splice(i, 1); else state.selected.push(key);
-  }
+  if (state.mode === "single") { startChat(key); return; }
+  // chain: toggle, preserve order
+  const i = state.selected.indexOf(key);
+  if (i >= 0) state.selected.splice(i, 1); else state.selected.push(key);
   paintSelection();
   focusComposer();
+}
+
+const OPENER = "Start our session. Based on my current focus, recent work, and 1:1, " +
+  "give me a brief high-value opener in your role (2-3 sentences), then ask me one sharp " +
+  "question to get going. No preamble, no restating who you are.";
+
+function startChat(key) {
+  if (state.busy) return;
+  state.selected = [key]; state.thread = []; paintSelection();
+  ask("single", [key], OPENER, { showUser: false, divider: `Talking to the ${shortName(key)}` });
 }
 function selectAgent(key) { state.selected = [key]; paintSelection(); }
 
@@ -89,6 +99,7 @@ function paintSelection() {
 // ---------- modes ----------
 function setMode(m) {
   state.mode = m;
+  state.thread = [];  // new context when the mode changes
   document.querySelectorAll(".mode").forEach((b) => b.classList.toggle("active", b.dataset.mode === m));
   const hints = {
     single: "Pick one agent, then ask.",
@@ -147,6 +158,8 @@ function addReacting(wrap, prior) {
   const r = el("div", "reacting"); r.innerHTML = `↑ reacting to <b>${escapeHtml(prior)}</b>`;
   wrap.insertBefore(r, wrap.firstChild);
 }
+function pushThread(speaker, text) { state.thread.push([speaker, text]); if (state.thread.length > MAX_THREAD) state.thread = state.thread.slice(-MAX_THREAD); }
+function addDivider(text) { clearEmpty(); const d = el("div", "divider"); d.append(el("span", null, text)); $("#conversation").append(d); scrollDown(); }
 function scrollDown() { const c = $("#conversation"); c.scrollTop = c.scrollHeight; }
 function escapeHtml(s) { return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 
@@ -159,14 +172,17 @@ function markSpeaking(key, on) {
 }
 
 // ---------- ask (SSE stream) ----------
-async function ask(mode, keys, message) {
+async function ask(mode, keys, message, opts = {}) {
   setBusy(true);
-  addUser(message);
+  const record = mode === "single";              // only single-agent chats keep memory
+  if (opts.divider) addDivider(opts.divider);
+  if (opts.showUser !== false) { addUser(message); if (record) pushThread("You", message); }
+  else clearEmpty();
   let body = null, wrap = null;
   try {
     const resp = await fetch("/api/ask", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode, agents: keys, message }),
+      body: JSON.stringify({ mode, agents: keys, message, history: record ? state.thread : [] }),
     });
     if (!resp.ok) { toast((await resp.json()).error || "request failed", true); setBusy(false); return; }
     const reader = resp.body.getReader(); const dec = new TextDecoder();
@@ -184,7 +200,7 @@ async function ask(mode, keys, message) {
         if (ev.type === "agent_start") { const r = addAgentBubble(ev.agent, ev.key); wrap = r.wrap; body = r.body; markSpeaking(ev.key, true); }
         else if (ev.type === "reacting_to" && wrap) { addReacting(wrap, ev.prior); }
         else if (ev.type === "token" && body) { body.textContent += ev.text; scrollDown(); }
-        else if (ev.type === "agent_done") { body?.classList.remove("streaming"); markSpeaking(ev.key, false); }
+        else if (ev.type === "agent_done") { body?.classList.remove("streaming"); markSpeaking(ev.key, false); if (record && body) pushThread(ev.agent, body.textContent); }
         else if (ev.type === "done") { /* finished */ }
       }
     }

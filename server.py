@@ -55,9 +55,10 @@ async def api_ask(req: Request):
     mode = body.get("mode", "single")
     keys = body.get("agents", [])
     message = (body.get("message") or "").strip()
+    history = body.get("history") or []
     if not message or (mode != "board" and not keys):
         return JSONResponse({"error": "need a message and at least one agent"}, status_code=400)
-    return _sse(O.run_stream(mode, keys, message))
+    return _sse(O.run_stream(mode, keys, message, history=history))
 
 
 @app.post("/api/brag")
