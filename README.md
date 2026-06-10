@@ -42,9 +42,12 @@ Two interfaces, same backend:
 ### GUI overview
 
 - **Left — agents:** card per agent; cards light up + show "speaking…" as they
-  stream. Mode toggle (Single / Chain / Board) + actions: Morning, Weekly, Sync, Brag.
+  stream. Mode toggle (Single / Chain / Board) + actions: Today, Morning, Weekly,
+  Sync, Brag. In **Single** mode each agent keeps its **own conversation** —
+  click "Critic" to see only your Critic history; click "PM" to switch to that thread.
 - **Center — conversation:** color-coded bubbles stream token-by-token; chain/board
-  show a "↑ reacting to …" connector so you can see the agents build on each other.
+  show a "↑ reacting to …" connector. **Drag an image in (or paste one)** to add
+  visual context — it's sent to the agent (vision).
 - **Right — activity:** timeline of weekly reviews + brag entries (click to expand).
 
 Stack: FastAPI (`server.py`) + SSE streaming over the existing modules, rendered

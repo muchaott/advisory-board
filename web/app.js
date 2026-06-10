@@ -8,22 +8,31 @@ const INITIALS = {
   strategist: "STR", pm: "PM", mentor: "MEN", ai: "AI", critic: "CRI", translator: "TRA",
 };
 const color = (k) => COLORS[k] || "#7c8cf8";
-
-const state = { mode: "single", selected: [], agents: [], byName: {}, busy: false, pending: null, thread: [] };
 const MAX_THREAD = 12;
+
+// convos: viewKey -> [turn]. turn = {t:'user'|'agent'|'divider', ...}
+const state = { mode: "single", selected: [], agents: [], byName: {}, busy: false, pending: null, convos: {}, attach: null };
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+// ---------- view + conversation store ----------
+function viewKey() {
+  if (state.mode === "single") return "single:" + (state.selected[0] || "");
+  return state.mode; // 'chain' | 'board'
+}
+function convo() { return (state.convos[viewKey()] ||= []); }
 
 // ---------- init ----------
 async function init() {
-  const r = await fetch("/api/agents");
-  state.agents = await r.json();
+  state.agents = await (await fetch("/api/agents")).json();
   state.agents.forEach((a) => (state.byName[a.name] = a.key));
   renderAgents();
   loadActivity();
   bindUI();
-  if (state.agents[0]) selectAgent(state.agents[0].key); // default single pick
+  if (state.agents[0]) { state.selected = [state.agents[0].key]; paintSelection(); }
+  renderConvo();
 }
 
 function renderAgents() {
@@ -49,8 +58,15 @@ function renderAgents() {
 }
 
 function onAgentClick(key) {
+  if (state.busy) return;
   if (state.mode === "board") { toast("Board mode uses all agents — just type your question."); return; }
-  if (state.mode === "single") { startChat(key); return; }
+  if (state.mode === "single") {
+    state.selected = [key]; paintSelection();
+    renderConvo();                                  // show THIS agent's history
+    if (convo().length === 0) startChat(key);       // first time → open the chat
+    else focusComposer();
+    return;
+  }
   // chain: toggle, preserve order
   const i = state.selected.indexOf(key);
   if (i >= 0) state.selected.splice(i, 1); else state.selected.push(key);
@@ -58,16 +74,15 @@ function onAgentClick(key) {
   focusComposer();
 }
 
-const OPENER = "Start our session. Based on my current focus, recent work, and 1:1, " +
+const OPENER = "Start our session. Based on my current focus, recent work, calendar, and 1:1, " +
   "give me a brief high-value opener in your role (2-3 sentences), then ask me one sharp " +
   "question to get going. No preamble, no restating who you are.";
 
 function startChat(key) {
   if (state.busy) return;
-  state.selected = [key]; state.thread = []; paintSelection();
+  state.selected = [key]; paintSelection();
   ask("single", [key], OPENER, { showUser: false, divider: `Talking to the ${shortName(key)}` });
 }
-function selectAgent(key) { state.selected = [key]; paintSelection(); }
 
 function shortName(key) {
   const a = state.agents.find((x) => x.key === key);
@@ -90,29 +105,27 @@ function paintSelection() {
     const idx = state.selected.indexOf(k);
     const on = state.mode !== "board" && idx >= 0;
     c.classList.toggle("selected", on);
-    if (on && state.mode === "chain") {
-      const pill = el("div", "order-pill", String(idx + 1)); c.append(pill);
-    }
+    if (on && state.mode === "chain") c.append(el("div", "order-pill", String(idx + 1)));
   });
 }
 
 // ---------- modes ----------
 function setMode(m) {
   state.mode = m;
-  state.thread = [];  // new context when the mode changes
   document.querySelectorAll(".mode").forEach((b) => b.classList.toggle("active", b.dataset.mode === m));
   const hints = {
-    single: "Pick one agent, then ask.",
+    single: "Click an agent to open that conversation.",
     chain: "Pick agents in order — each sees the prior replies.",
     board: "All agents weigh in; the Mentor synthesizes.",
   };
   $("#modeHint").textContent = hints[m];
   if (m === "single" && state.selected.length > 1) state.selected = state.selected.slice(0, 1);
   paintSelection();
+  renderConvo();
   focusComposer();
 }
 
-// ---------- @mention parsing (mirror of the CLI) ----------
+// ---------- @mention parsing ----------
 function parseMentions(text) {
   const t = text.trim();
   if (!t.startsWith("@")) return null;
@@ -135,54 +148,85 @@ function parseMentions(text) {
   return { mode: keys.length > 1 ? "chain" : "single", keys, message };
 }
 
-// ---------- conversation ----------
-function clearEmpty() { $("#emptyState")?.remove(); }
-function addUser(text) {
-  clearEmpty();
-  const m = el("div", "msg user", text); $("#conversation").append(m); scrollDown();
+// ---------- DOM builders ----------
+function emptyStateNode() {
+  const wrap = el("div", "empty"); wrap.id = "emptyState";
+  wrap.append(el("div", "empty-table"));
+  const p = el("p");
+  p.innerHTML = "Pick an agent on the left to open a conversation. Each agent keeps its own history. " +
+    "Type below and press Enter — or drag an image in to add context.";
+  const p2 = el("p", "empty-eg");
+  p2.innerHTML = "Or type <code>@critic …</code>, <code>@strategist &gt; @translator …</code>, or switch to <strong>Board</strong>.";
+  wrap.append(p, p2);
+  return wrap;
 }
-function addAgentBubble(name, key) {
+function clearEmpty() { $("#emptyState")?.remove(); }
+
+function domUser(text, image) {
+  clearEmpty();
+  const m = el("div", "msg user");
+  if (image) { const img = el("img", "msg-img"); img.src = image; m.append(img); }
+  if (text) m.append(el("div", null, text));
+  $("#conversation").append(m); scrollDown();
+}
+function domDivider(text) { clearEmpty(); const d = el("div", "divider"); d.append(el("span", null, text)); $("#conversation").append(d); scrollDown(); }
+
+function buildAgentBubble(name, key, reacting, streaming) {
   clearEmpty();
   const wrap = el("div", "msg agent");
   wrap.style.setProperty("--ac", color(key));
+  if (reacting) { const r = el("div", "reacting"); r.innerHTML = `↑ reacting to <b>${escapeHtml(reacting)}</b>`; wrap.append(r); }
   const b = el("div", "bubble");
   const head = el("div", "bubble-head");
-  head.append(el("div", "av", INITIALS[key] || key.slice(0, 2).toUpperCase()));
-  head.querySelector(".av").style.background = color(key);
-  head.append(el("div", "bubble-name", name));
-  const body = el("div", "bubble-body streaming");
+  const av = el("div", "av", INITIALS[key] || key.slice(0, 2).toUpperCase());
+  av.style.background = color(key);
+  head.append(av, el("div", "bubble-name", name));
+  const body = el("div", "bubble-body" + (streaming ? " streaming" : ""));
   b.append(head, body); wrap.append(b); $("#conversation").append(wrap); scrollDown();
   return { wrap, body };
 }
-function addReacting(wrap, prior) {
-  const r = el("div", "reacting"); r.innerHTML = `↑ reacting to <b>${escapeHtml(prior)}</b>`;
-  wrap.insertBefore(r, wrap.firstChild);
+function addReacting(wrap, prior) { const r = el("div", "reacting"); r.innerHTML = `↑ reacting to <b>${escapeHtml(prior)}</b>`; wrap.insertBefore(r, wrap.firstChild); }
+
+function renderTurn(turn) {
+  if (turn.t === "divider") domDivider(turn.text);
+  else if (turn.t === "user") domUser(turn.text, turn.image);
+  else if (turn.t === "agent") { const { body } = buildAgentBubble(turn.name, turn.key, turn.reacting, false); body.textContent = turn.text; }
 }
-function pushThread(speaker, text) { state.thread.push([speaker, text]); if (state.thread.length > MAX_THREAD) state.thread = state.thread.slice(-MAX_THREAD); }
-function addDivider(text) { clearEmpty(); const d = el("div", "divider"); d.append(el("span", null, text)); $("#conversation").append(d); scrollDown(); }
+function renderConvo() {
+  const conv = $("#conversation"); conv.innerHTML = "";
+  const arr = convo();
+  if (!arr.length) { conv.append(emptyStateNode()); return; }
+  arr.forEach(renderTurn); scrollDown();
+}
 function scrollDown() { const c = $("#conversation"); c.scrollTop = c.scrollHeight; }
-function escapeHtml(s) { return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 
 function markSpeaking(key, on) {
   const card = document.querySelector(`.agent[data-key="${key}"]`);
   if (!card) return;
   card.classList.toggle("speaking", on);
   card.querySelector(".speaking-tag")?.remove();
-  if (on) { const t = el("div", "speaking-tag", "speaking…"); card.append(t); }
+  if (on) card.append(el("div", "speaking-tag", "speaking…"));
 }
 
 // ---------- ask (SSE stream) ----------
 async function ask(mode, keys, message, opts = {}) {
   setBusy(true);
-  const record = mode === "single";              // only single-agent chats keep memory
-  if (opts.divider) addDivider(opts.divider);
-  if (opts.showUser !== false) { addUser(message); if (record) pushThread("You", message); }
+  const arr = convo();
+  const record = mode === "single";
+  const history = record
+    ? arr.filter((x) => x.t === "user" || x.t === "agent").map((x) => [x.t === "user" ? "You" : x.name, x.text]).slice(-MAX_THREAD)
+    : [];
+  const images = opts.images || [];
+
+  if (opts.divider) { domDivider(opts.divider); arr.push({ t: "divider", text: opts.divider }); }
+  if (opts.showUser !== false) { domUser(message, opts.imageDataUrl); arr.push({ t: "user", text: message, image: opts.imageDataUrl || null }); }
   else clearEmpty();
-  let body = null, wrap = null;
+
+  let body = null, wrap = null, reacting = null;
   try {
     const resp = await fetch("/api/ask", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode, agents: keys, message, history: record ? state.thread : [] }),
+      body: JSON.stringify({ mode, agents: keys, message, history, images }),
     });
     if (!resp.ok) { toast((await resp.json()).error || "request failed", true); setBusy(false); return; }
     const reader = resp.body.getReader(); const dec = new TextDecoder();
@@ -197,11 +241,13 @@ async function ask(mode, keys, message, opts = {}) {
         const line = chunk.split("\n").find((l) => l.startsWith("data: "));
         if (!line) continue;
         const ev = JSON.parse(line.slice(6));
-        if (ev.type === "agent_start") { const r = addAgentBubble(ev.agent, ev.key); wrap = r.wrap; body = r.body; markSpeaking(ev.key, true); }
-        else if (ev.type === "reacting_to" && wrap) { addReacting(wrap, ev.prior); }
+        if (ev.type === "agent_start") { reacting = null; const r = buildAgentBubble(ev.agent, ev.key, null, true); wrap = r.wrap; body = r.body; markSpeaking(ev.key, true); }
+        else if (ev.type === "reacting_to" && wrap) { reacting = ev.prior; addReacting(wrap, ev.prior); }
         else if (ev.type === "token" && body) { body.textContent += ev.text; scrollDown(); }
-        else if (ev.type === "agent_done") { body?.classList.remove("streaming"); markSpeaking(ev.key, false); if (record && body) pushThread(ev.agent, body.textContent); }
-        else if (ev.type === "done") { /* finished */ }
+        else if (ev.type === "agent_done") {
+          body?.classList.remove("streaming"); markSpeaking(ev.key, false);
+          if (body) arr.push({ t: "agent", key: ev.key, name: ev.agent, text: body.textContent, reacting });
+        }
       }
     }
   } catch (e) {
@@ -213,10 +259,6 @@ async function ask(mode, keys, message, opts = {}) {
   }
 }
 
-// reacting connector: we know prior agent at start for i>0, so peek via a tiny lookahead.
-// Simpler: handle reacting_to by attaching to the latest bubble before tokens arrive.
-// (We add it live below.)
-
 function setBusy(b) { state.busy = b; $("#send").disabled = b; $("#input").disabled = b; }
 
 // ---------- submit ----------
@@ -224,23 +266,52 @@ function onSubmit(e) {
   e?.preventDefault();
   if (state.busy) return;
   const inputEl = $("#input"); const raw = inputEl.value.trim();
-  if (!raw) return;
+  if (!raw && !state.attach) return;
 
-  if (state.pending === "brag") { doBrag(raw); inputEl.value = ""; cancelPending(); return; }
+  if (state.pending === "brag") { if (raw) doBrag(raw); inputEl.value = ""; cancelPending(); return; }
 
   const parsed = parseMentions(raw);
-  let mode, keys, message;
-  if (parsed) { mode = parsed.mode; keys = parsed.keys; message = parsed.message; if (parsed.mode) setMode(parsed.mode); if (keys.length) { state.selected = keys; paintSelection(); } }
-  else { mode = state.mode; keys = state.selected.slice(); message = raw; }
+  let mode, keys, message, switched = false;
+  if (parsed) {
+    mode = parsed.mode; keys = parsed.keys; message = parsed.message;
+    if (parsed.mode) { setMode(parsed.mode); switched = true; }
+    if (keys.length) { state.selected = keys; paintSelection(); switched = true; }
+  } else { mode = state.mode; keys = state.selected.slice(); message = raw; }
 
-  if (!message) { toast("Add a message after the agent(s).", true); return; }
   if (mode !== "board" && keys.length === 0) { toast("Pick an agent (left) or @mention one.", true); return; }
+  if (switched) renderConvo();
 
-  inputEl.value = ""; autoGrow(inputEl);
-  ask(mode, keys, message);
+  const images = state.attach ? [{ media_type: state.attach.media_type, data: state.attach.data }] : [];
+  const imageDataUrl = state.attach ? state.attach.dataUrl : null;
+  inputEl.value = ""; autoGrow(inputEl); clearAttach();
+  ask(mode, keys, message, { images, imageDataUrl });
+}
+
+// ---------- image attachment ----------
+function setAttach(file) {
+  if (!file || !file.type.startsWith("image/")) { toast("Only images can be attached.", true); return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    const m = /^data:(.*?);base64,(.*)$/.exec(reader.result);
+    if (!m) { toast("Could not read that image.", true); return; }
+    state.attach = { dataUrl: reader.result, media_type: m[1], data: m[2] };
+    renderAttachBar(); $("#input").focus();
+  };
+  reader.readAsDataURL(file);
+}
+function clearAttach() { state.attach = null; renderAttachBar(); }
+function renderAttachBar() {
+  const bar = $("#attachBar");
+  if (!state.attach) { bar.hidden = true; bar.innerHTML = ""; return; }
+  bar.hidden = false; bar.innerHTML = "";
+  const img = el("img", "attach-thumb"); img.src = state.attach.dataUrl;
+  const x = el("button", "attach-x", "✕"); x.title = "Remove"; x.onclick = clearAttach;
+  bar.append(img, el("span", "attach-name", "Image attached — it'll be sent with your next message"), x);
 }
 
 // ---------- quick actions ----------
+function pushAgentTurn(name, key, text) { convo().push({ t: "agent", key, name, text, reacting: null }); }
+
 async function doMorning() {
   setBusy(true);
   try {
@@ -252,7 +323,7 @@ async function doMorning() {
     qs.forEach((q, i) => {
       const mq = el("div", "mq");
       const lab = el("label", null, `${i + 1}. ${q}`); lab.htmlFor = `mq${i}`;
-      const ta = el("textarea"); ta.id = `mq${i}`; ta.rows = 2; ta.dataset.q = q;
+      const ta = el("textarea"); ta.id = `mq${i}`; ta.rows = 2;
       mq.append(lab, ta); card.append(mq);
     });
     const actions = el("div", "mform-actions");
@@ -267,8 +338,9 @@ async function doMorning() {
       submit.disabled = true; submit.textContent = "Synthesizing…";
       const res = await (await fetch("/api/morning/plan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ answers }) })).json();
       form.remove();
-      const { body } = addAgentBubble("The Design Project Manager", "pm");
-      body.classList.remove("streaming"); body.textContent = res.plan || "(no plan)";
+      const { body } = buildAgentBubble("The Design Project Manager", "pm", null, false);
+      body.textContent = res.plan || "(no plan)";
+      pushAgentTurn("Morning focus", "pm", res.plan || "(no plan)");
     };
   } catch (e) { toast("morning failed: " + e.message, true); }
   finally { setBusy(false); }
@@ -276,12 +348,12 @@ async function doMorning() {
 
 async function doWeekly() {
   setBusy(true);
-  clearEmpty();
-  const { body } = addAgentBubble("Weekly review", "mentor");
+  const { body } = buildAgentBubble("Weekly review", "mentor", null, true);
   body.textContent = "Running weekly review (PM summary → Mentor)…";
   try {
     const res = await (await fetch("/api/weekly", { method: "POST" })).json();
     body.classList.remove("streaming"); body.textContent = res.review || "(no review)";
+    pushAgentTurn("Weekly review", "mentor", res.review || "(no review)");
     loadActivity();
   } catch (e) { body.textContent = "weekly failed: " + e.message; }
   finally { setBusy(false); }
@@ -293,12 +365,10 @@ async function doToday() {
     const lines = ["Today:"];
     (c.today || []).forEach((t) => lines.push("  • " + t));
     if (!(c.today || []).length) lines.push("  (nothing on the calendar)");
-    if ((c.upcoming || []).length) {
-      lines.push("", "Next 7 days:");
-      c.upcoming.slice(0, 12).forEach((t) => lines.push("  • " + t));
-    }
-    const { body } = addAgentBubble("Calendar", "calendar");
-    body.classList.remove("streaming"); body.textContent = lines.join("\n");
+    if ((c.upcoming || []).length) { lines.push("", "Next 7 days:"); c.upcoming.slice(0, 12).forEach((t) => lines.push("  • " + t)); }
+    const text = lines.join("\n");
+    const { body } = buildAgentBubble("Calendar", "calendar", null, false);
+    body.textContent = text; pushAgentTurn("Calendar", "calendar", text);
   } catch (e) { toast("calendar failed: " + e.message, true); }
 }
 
@@ -310,21 +380,12 @@ async function doSync() {
   } catch (e) { toast("sync failed: " + e.message, true); }
 }
 
-function startBrag() {
-  state.pending = "brag";
-  const i = $("#input"); i.placeholder = "What did you do? (logged to your Brag Doc) — Esc to cancel"; i.focus();
-  $("#send").textContent = "＋";
-}
-function cancelPending() {
-  state.pending = null;
-  $("#input").placeholder = "Ask the board…  (@critic review this flow: …)";
-  $("#send").textContent = "▶";
-}
+function startBrag() { state.pending = "brag"; const i = $("#input"); i.placeholder = "What did you do? (logged to your Brag Doc) — Esc to cancel"; i.focus(); $("#send").textContent = "＋"; }
+function cancelPending() { state.pending = null; focusComposer(); $("#send").textContent = "▶"; }
 async function doBrag(text) {
   try {
     const res = await (await fetch("/api/brag", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) })).json();
-    toast(`Logged → ${res.section}`);
-    loadActivity();
+    toast(`Logged → ${res.section}`); loadActivity();
   } catch (e) { toast("brag failed: " + e.message, true); }
 }
 
@@ -337,8 +398,7 @@ async function loadActivity() {
     items.forEach((it) => {
       const card = el("div", `tl-item tl-kind-${it.kind}`);
       const top = el("div", "tl-top");
-      top.append(el("div", "tl-title", it.title));
-      top.append(el("div", "tl-date", it.date || ""));
+      top.append(el("div", "tl-title", it.title), el("div", "tl-date", it.date || ""));
       card.append(top);
       if (it.body) card.append(el("div", "tl-body", it.body));
       card.onclick = () => openModal(it.title + (it.date ? " · " + it.date : ""), it.body || "");
@@ -346,15 +406,10 @@ async function loadActivity() {
     });
   } catch { /* ignore */ }
 }
-
 function openModal(title, body) { $("#modalTitle").textContent = title; $("#modalBody").textContent = body; $("#modal").hidden = false; }
 
 // ---------- toasts ----------
-function toast(msg, err) {
-  const t = el("div", "toast" + (err ? " err" : ""), msg);
-  $("#toasts").append(t);
-  setTimeout(() => t.remove(), 4200);
-}
+function toast(msg, err) { const t = el("div", "toast" + (err ? " err" : ""), msg); $("#toasts").append(t); setTimeout(() => t.remove(), 4200); }
 
 // ---------- ui binding ----------
 function autoGrow(t) { t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; }
@@ -377,6 +432,13 @@ function bindUI() {
   }));
   $("#modalClose").onclick = () => ($("#modal").hidden = true);
   $("#modal").onclick = (e) => { if (e.target.id === "modal") $("#modal").hidden = true; };
+
+  // drag-and-drop + paste images
+  const center = document.querySelector(".center");
+  ["dragenter", "dragover"].forEach((ev) => center.addEventListener(ev, (e) => { e.preventDefault(); center.classList.add("drag-over"); }));
+  center.addEventListener("dragleave", (e) => { if (!center.contains(e.relatedTarget)) center.classList.remove("drag-over"); });
+  center.addEventListener("drop", (e) => { e.preventDefault(); center.classList.remove("drag-over"); const f = e.dataTransfer.files[0]; if (f) setAttach(f); });
+  document.addEventListener("paste", (e) => { const it = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith("image/")); if (it) setAttach(it.getAsFile()); });
 }
 
 init();

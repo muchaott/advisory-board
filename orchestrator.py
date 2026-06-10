@@ -44,22 +44,34 @@ def ask(agent: A.Agent, topic: str, transcript: list[tuple[str, str]] | None = N
 
 # ---- streaming (GUI) -----------------------------------------------------
 
-def _ask_stream(agent: A.Agent, topic: str, transcript: list[tuple[str, str]]):
+def _content(user: str, images: list | None):
+    """Build message content: image blocks + text, or just text."""
+    if not images:
+        return user
+    blocks = [{"type": "image", "source": {"type": "base64",
+              "media_type": im.get("media_type", "image/png"), "data": im.get("data", "")}}
+              for im in images if im.get("data")]
+    blocks.append({"type": "text", "text": user})
+    return blocks or user
+
+
+def _ask_stream(agent: A.Agent, topic: str, transcript: list[tuple[str, str]], images: list | None = None):
     """Yield text deltas for one agent's turn; appends its full reply to transcript."""
     docs = C.agent_context() if agent.reads_docs else ""
     user = _build_user(agent, topic, transcript)
     buf = []
-    for delta in llm.stream(agent.system(docs), [{"role": "user", "content": user}], deep=_deep(agent)):
+    for delta in llm.stream(agent.system(docs), [{"role": "user", "content": _content(user, images)}], deep=_deep(agent)):
         buf.append(delta)
         yield delta
     transcript.append((agent.name, "".join(buf)))
 
 
-def run_stream(mode: str, keys: list[str], topic: str, history: list | None = None):
+def run_stream(mode: str, keys: list[str], topic: str, history: list | None = None, images: list | None = None):
     """Drive single/chain/board and yield UI events.
 
     `history` (list of [speaker, text]) seeds prior conversation turns so a
-    single-agent chat has memory. Events: agent_start, reacting_to, token,
+    single-agent chat has memory. `images` (list of {media_type,data}) are
+    attached to each agent's turn. Events: agent_start, reacting_to, token,
     agent_done, done.
     """
     transcript: list[tuple[str, str]] = [(h[0], h[1]) for h in (history or []) if len(h) == 2]
@@ -81,7 +93,7 @@ def run_stream(mode: str, keys: list[str], topic: str, history: list | None = No
         yield {"type": "agent_start", "agent": agent.name, "key": agent.key, "deep": _deep(agent)}
         if i > 0 and transcript:
             yield {"type": "reacting_to", "agent": agent.name, "prior": transcript[-1][0]}
-        for delta in _ask_stream(agent, topic, transcript):
+        for delta in _ask_stream(agent, topic, transcript, images):
             yield {"type": "token", "agent": agent.name, "key": agent.key, "text": delta}
         yield {"type": "agent_done", "agent": agent.name, "key": agent.key}
 
@@ -97,7 +109,7 @@ def run_stream(mode: str, keys: list[str], topic: str, history: list | None = No
         yield {"type": "reacting_to", "agent": label, "prior": "the board"}
         docs = C.agent_context()
         user = _build_user(mentor, synth_topic, transcript)
-        for delta in llm.stream(mentor.system(docs), [{"role": "user", "content": user}], deep=_deep(mentor)):
+        for delta in llm.stream(mentor.system(docs), [{"role": "user", "content": _content(user, images)}], deep=_deep(mentor)):
             yield {"type": "token", "agent": label, "key": mentor.key, "text": delta}
         yield {"type": "agent_done", "agent": label, "key": mentor.key}
 
