@@ -99,6 +99,20 @@ The weekly review also runs this best-effort before generating. Notes:
   guaranteed-fresh Thursday review, run `sync_gdoc.py` after your Wednesday
   update (or just ask Claude to "sync my 1:1").
 
+## Morning check-in (weekdays 9am)
+
+Every weekday at 09:00 a launchd job
+(`~/Library/LaunchAgents/com.mtang.advisory-board.morning.plist`) pops open the
+board and runs `/morning`: the PM asks a few **personalized** questions (drawn
+from recent activity + the 1:1 + current focus) to set up a high-leverage day,
+then synthesizes `TODAY'S FOCUS / SAY NO TO / L5 ANGLE` from your answers. Run it
+anytime in the CLI with `/morning` (aliases `/standup`, `/today`).
+
+```bash
+launchctl bootout  gui/$(id -u)/com.mtang.advisory-board.morning      # disable
+launchctl kickstart -k gui/$(id -u)/com.mtang.advisory-board.morning  # run now
+```
+
 ## Weekly review (scheduling)
 
 Runs every **Thursday 09:00 local** via launchd

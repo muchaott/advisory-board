@@ -7,6 +7,7 @@ Usage examples (type these at the prompt):
   @critic review this flow: a user taps a pending P2P payment and ...
   @strategist > @critic > @translator redesign the Activity L1 module
   @board should we surface scheduled payments above or below pending?
+  /morning                 -> start the morning check-in (sets up your day)
   /brag Shipped the Activity redesign spec; cut support tickets 12%
   /weekly                  -> run the Career Mentor's weekly review now
   /agents                  -> list the board
@@ -78,6 +79,11 @@ def handle(line: str) -> bool:
         print(f"\nLogged under {heading}:\n  {entry}\n")
         return True
 
+    if low in ("/morning", "/standup", "/today"):
+        import morning
+        print(morning.run(interactive=True))
+        return True
+
     if low.startswith("/weekly"):
         from scheduler import run_weekly_review
         print("\nRunning the Career Mentor's weekly review...\n")
@@ -145,6 +151,10 @@ def _parse_mentions(line: str):
 
 def main():
     banner()
+    if "--morning" in sys.argv:
+        import morning
+        print(morning.run())
+        print()
     while True:
         try:
             line = input("board> ")
