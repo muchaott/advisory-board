@@ -54,9 +54,10 @@ icon ("Advisory Board"); clicking it reopens the window (closing just hides it).
 ### GUI overview
 
 - **Left — agents:** card per agent; cards light up + show "speaking…" as they
-  stream. Mode toggle (Single / Chain / Board) + actions: Today, Morning, Weekly,
-  Sync, Brag. In **Single** mode each agent keeps its **own conversation** —
-  click "Critic" to see only your Critic history; click "PM" to switch to that thread.
+  stream. Toolbar: **New chat · Morning · Brag**. Each agent keeps its **own
+  conversation** — click "Critic" to see only your Critic history; click "PM" to
+  switch; click **The Whole Board** for all six. (Chain by typing `@a > @b …`.)
+  Weekly review + 1:1 sync run on a schedule, not from the toolbar.
 - **Center — conversation:** color-coded bubbles stream token-by-token; chain/board
   show a "↑ reacting to …" connector. **Drag an image in (or paste one)** to add
   visual context — it's sent to the agent (vision).
@@ -128,7 +129,10 @@ latest version. Set `GDOC_1ON1_ID` (→ `docs/1on1-nathan.md`) or `GDOC_SYNC`
 ./.venv/bin/python sync_gdoc.py     # refresh now
 ```
 
-The weekly review also runs this best-effort before generating. Notes:
+A launchd job also syncs the 1:1 automatically **every Wednesday 16:00**
+(`com.mtang.advisory-board.sync.plist`) — right after your usual Wednesday
+update — so Thursday's 9am weekly review reads a fresh copy. The weekly review
+also runs this best-effort before generating. Notes:
 
 - **Read-only + safe:** it only reads the google-docs token Claude Code already
   keeps in the keychain — never refreshes/writes it — so it can't break Claude's

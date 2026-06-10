@@ -421,46 +421,12 @@ async function doMorning() {
   finally { setBusy(vk, false); }
 }
 
-async function doWeekly() {
-  const vk = viewKey(); setBusy(vk, true);
-  const { body } = buildAgentBubble("Weekly review", "mentor", null, true);
-  body.textContent = "Running weekly review (PM summary → Mentor)…";
-  try {
-    const res = await (await fetch("/api/weekly", { method: "POST" })).json();
-    body.classList.remove("streaming"); body.textContent = res.review || "(no review)";
-    pushAgentTurn("Weekly review", "mentor", res.review || "(no review)");
-    loadActivity();
-  } catch (e) { body.textContent = "weekly failed: " + e.message; }
-  finally { setBusy(vk, false); }
-}
-
-async function doToday() {
-  try {
-    const c = await (await fetch("/api/calendar")).json();
-    const lines = ["Today:"];
-    (c.today || []).forEach((t) => lines.push("  • " + t));
-    if (!(c.today || []).length) lines.push("  (nothing on the calendar)");
-    if ((c.upcoming || []).length) { lines.push("", "Next 7 days:"); c.upcoming.slice(0, 12).forEach((t) => lines.push("  • " + t)); }
-    const text = lines.join("\n");
-    const { body } = buildAgentBubble("Calendar", "calendar", null, false);
-    body.textContent = text; pushAgentTurn("Calendar", "calendar", text);
-  } catch (e) { toast("calendar failed: " + e.message, true); }
-}
-
 function doNewChat() {
   if (isBusy()) { toast("Wait for the current response to finish.", true); return; }
   state.convos[viewKey()] = [];
   renderConvo(); saveConvos();
   if (state.mode === "single" && state.selected[0]) startChat(state.selected[0]);
   else focusComposer();
-}
-
-async function doSync() {
-  toast("Syncing Google Docs…");
-  try {
-    const res = (await (await fetch("/api/sync", { method: "POST" })).json()).results || [];
-    res.forEach((r) => toast(`${r.file}: ${r.status}`, r.status.startsWith("err")));
-  } catch (e) { toast("sync failed: " + e.message, true); }
 }
 
 async function doBrag(text) {
@@ -538,10 +504,7 @@ function bindUI() {
   document.querySelectorAll(".act").forEach((b) => (b.onclick = () => {
     const a = b.dataset.action;
     if (a === "new") doNewChat();
-    else if (a === "today") doToday();
     else if (a === "morning") doMorning();
-    else if (a === "weekly") doWeekly();
-    else if (a === "sync") doSync();
     else if (a === "brag") bragPanel();
   }));
   $("#modalClose").onclick = () => ($("#modal").hidden = true);
