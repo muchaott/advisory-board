@@ -11,7 +11,7 @@ const color = (k) => COLORS[k] || "#7c8cf8";
 const MAX_THREAD = 12;
 
 // convos: viewKey -> [turn]. turn = {t:'user'|'agent'|'divider', ...}
-const state = { mode: "single", selected: [], agents: [], byName: {}, busy: false, pending: null, convos: {}, attach: null };
+const state = { mode: "single", selected: [], agents: [], byName: {}, busyViews: new Set(), pending: null, convos: {}, attach: null };
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
@@ -23,6 +23,9 @@ function viewKey() {
   return state.mode; // 'chain' | 'board'
 }
 function convo() { return (state.convos[viewKey()] ||= []); }
+function isBusy(vk) { return state.busyViews.has(vk ?? viewKey()); }
+function setBusy(vk, b) { if (b) state.busyViews.add(vk); else state.busyViews.delete(vk); updateComposerEnabled(); }
+function updateComposerEnabled() { const dis = isBusy(viewKey()); $("#send").disabled = dis; $("#input").disabled = dis; }
 
 // ---------- init ----------
 async function init() {
@@ -58,12 +61,12 @@ function renderAgents() {
 }
 
 function onAgentClick(key) {
-  if (state.busy) return;
   if (state.mode === "board") { toast("Board mode uses all agents — just type your question."); return; }
   if (state.mode === "single") {
     state.selected = [key]; paintSelection();
     renderConvo();                                  // show THIS agent's history
-    if (convo().length === 0) startChat(key);       // first time → open the chat
+    updateComposerEnabled();                        // enabled unless THIS agent is mid-stream
+    if (!isBusy() && convo().length === 0) startChat(key);  // first time → open the chat
     else focusComposer();
     return;
   }
@@ -79,7 +82,7 @@ const OPENER = "Start our session. Based on my current focus, recent work, calen
   "question to get going. No preamble, no restating who you are.";
 
 function startChat(key) {
-  if (state.busy) return;
+  if (isBusy("single:" + key)) return;
   state.selected = [key]; paintSelection();
   ask("single", [key], OPENER, { showUser: false, divider: `Talking to the ${shortName(key)}` });
 }
@@ -122,6 +125,7 @@ function setMode(m) {
   if (m === "single" && state.selected.length > 1) state.selected = state.selected.slice(0, 1);
   paintSelection();
   renderConvo();
+  updateComposerEnabled();
   focusComposer();
 }
 
@@ -210,9 +214,12 @@ function markSpeaking(key, on) {
 
 // ---------- ask (SSE stream) ----------
 async function ask(mode, keys, message, opts = {}) {
-  setBusy(true);
+  const vk = viewKey();
+  if (isBusy(vk)) { toast("This conversation is still generating — switch agents or wait.", true); return; }
+  setBusy(vk, true);
   const arr = convo();
   const record = mode === "single";
+  const startedKeys = new Set();
   const history = record
     ? arr.filter((x) => x.t === "user" || x.t === "agent").map((x) => [x.t === "user" ? "You" : x.name, x.text]).slice(-MAX_THREAD)
     : [];
@@ -228,7 +235,7 @@ async function ask(mode, keys, message, opts = {}) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ mode, agents: keys, message, history, images }),
     });
-    if (!resp.ok) { toast((await resp.json()).error || "request failed", true); setBusy(false); return; }
+    if (!resp.ok) { toast((await resp.json()).error || "request failed", true); setBusy(vk, false); return; }
     const reader = resp.body.getReader(); const dec = new TextDecoder();
     let buf = "";
     for (;;) {
@@ -241,9 +248,9 @@ async function ask(mode, keys, message, opts = {}) {
         const line = chunk.split("\n").find((l) => l.startsWith("data: "));
         if (!line) continue;
         const ev = JSON.parse(line.slice(6));
-        if (ev.type === "agent_start") { reacting = null; const r = buildAgentBubble(ev.agent, ev.key, null, true); wrap = r.wrap; body = r.body; markSpeaking(ev.key, true); }
+        if (ev.type === "agent_start") { reacting = null; startedKeys.add(ev.key); const r = buildAgentBubble(ev.agent, ev.key, null, true); wrap = r.wrap; body = r.body; markSpeaking(ev.key, true); }
         else if (ev.type === "reacting_to" && wrap) { reacting = ev.prior; addReacting(wrap, ev.prior); }
-        else if (ev.type === "token" && body) { body.textContent += ev.text; scrollDown(); }
+        else if (ev.type === "token" && body) { body.textContent += ev.text; if (body.isConnected) scrollDown(); }
         else if (ev.type === "agent_done") {
           body?.classList.remove("streaming"); markSpeaking(ev.key, false);
           if (body) arr.push({ t: "agent", key: ev.key, name: ev.agent, text: body.textContent, reacting });
@@ -253,18 +260,16 @@ async function ask(mode, keys, message, opts = {}) {
   } catch (e) {
     toast("stream error: " + e.message, true);
   } finally {
-    document.querySelectorAll(".agent.speaking").forEach((c) => { c.classList.remove("speaking"); c.querySelector(".speaking-tag")?.remove(); });
-    setBusy(false);
+    startedKeys.forEach((k) => markSpeaking(k, false));
+    setBusy(vk, false);
     loadActivity();
   }
 }
 
-function setBusy(b) { state.busy = b; $("#send").disabled = b; $("#input").disabled = b; }
-
 // ---------- submit ----------
 function onSubmit(e) {
   e?.preventDefault();
-  if (state.busy) return;
+  if (isBusy()) return;
   const inputEl = $("#input"); const raw = inputEl.value.trim();
   if (!raw && !state.attach) return;
 
@@ -313,7 +318,7 @@ function renderAttachBar() {
 function pushAgentTurn(name, key, text) { convo().push({ t: "agent", key, name, text, reacting: null }); }
 
 async function doMorning() {
-  setBusy(true);
+  const vk = viewKey(); setBusy(vk, true);
   try {
     const qs = (await (await fetch("/api/morning")).json()).questions || [];
     clearEmpty();
@@ -343,11 +348,11 @@ async function doMorning() {
       pushAgentTurn("Morning focus", "pm", res.plan || "(no plan)");
     };
   } catch (e) { toast("morning failed: " + e.message, true); }
-  finally { setBusy(false); }
+  finally { setBusy(vk, false); }
 }
 
 async function doWeekly() {
-  setBusy(true);
+  const vk = viewKey(); setBusy(vk, true);
   const { body } = buildAgentBubble("Weekly review", "mentor", null, true);
   body.textContent = "Running weekly review (PM summary → Mentor)…";
   try {
@@ -356,7 +361,7 @@ async function doWeekly() {
     pushAgentTurn("Weekly review", "mentor", res.review || "(no review)");
     loadActivity();
   } catch (e) { body.textContent = "weekly failed: " + e.message; }
-  finally { setBusy(false); }
+  finally { setBusy(vk, false); }
 }
 
 async function doToday() {
