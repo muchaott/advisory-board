@@ -11,7 +11,8 @@ const color = (k) => COLORS[k] || "#7c8cf8";
 const MAX_THREAD = 12;
 
 // convos: viewKey -> [turn]. turn = {t:'user'|'agent'|'divider', ...}
-const state = { mode: "single", selected: [], agents: [], byName: {}, busyViews: new Set(), pending: null, convos: {}, attach: null };
+const state = { mode: "single", selected: [], agents: [], byName: {}, busyViews: new Set(), pending: null, convos: {}, attach: null, quote: null };
+let pendingQuote = null;
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
@@ -166,10 +167,11 @@ function emptyStateNode() {
 }
 function clearEmpty() { $("#emptyState")?.remove(); }
 
-function domUser(text, image) {
+function domUser(text, image, quote) {
   clearEmpty();
   const m = el("div", "msg user");
   if (image) { const img = el("img", "msg-img"); img.src = image; m.append(img); }
+  if (quote) m.append(el("div", "msg-quote", quote));
   if (text) m.append(el("div", null, text));
   $("#conversation").append(m); scrollDown();
 }
@@ -193,7 +195,7 @@ function addReacting(wrap, prior) { const r = el("div", "reacting"); r.innerHTML
 
 function renderTurn(turn) {
   if (turn.t === "divider") domDivider(turn.text);
-  else if (turn.t === "user") domUser(turn.text, turn.image);
+  else if (turn.t === "user") domUser(turn.text, turn.image, turn.quote);
   else if (turn.t === "agent") { const { body } = buildAgentBubble(turn.name, turn.key, turn.reacting, false); body.textContent = turn.text; }
 }
 function renderConvo() {
@@ -226,8 +228,11 @@ async function ask(mode, keys, message, opts = {}) {
   const images = opts.images || [];
 
   if (opts.divider) { domDivider(opts.divider); arr.push({ t: "divider", text: opts.divider }); }
-  if (opts.showUser !== false) { domUser(message, opts.imageDataUrl); arr.push({ t: "user", text: message, image: opts.imageDataUrl || null }); }
-  else clearEmpty();
+  if (opts.showUser !== false) {
+    const disp = opts.display ?? message;
+    domUser(disp, opts.imageDataUrl, opts.quote);
+    arr.push({ t: "user", text: disp, image: opts.imageDataUrl || null, quote: opts.quote || null });
+  } else clearEmpty();
 
   let body = null, wrap = null, reacting = null;
   try {
@@ -271,25 +276,68 @@ function onSubmit(e) {
   e?.preventDefault();
   if (isBusy()) return;
   const inputEl = $("#input"); const raw = inputEl.value.trim();
-  if (!raw && !state.attach) return;
+  if (!raw && !state.attach && !state.quote) return;
 
   if (state.pending === "brag") { if (raw) doBrag(raw); inputEl.value = ""; cancelPending(); return; }
 
   const parsed = parseMentions(raw);
-  let mode, keys, message, switched = false;
+  let mode, keys, display, switched = false;
   if (parsed) {
-    mode = parsed.mode; keys = parsed.keys; message = parsed.message;
+    mode = parsed.mode; keys = parsed.keys; display = parsed.message;
     if (parsed.mode) { setMode(parsed.mode); switched = true; }
     if (keys.length) { state.selected = keys; paintSelection(); switched = true; }
-  } else { mode = state.mode; keys = state.selected.slice(); message = raw; }
+  } else { mode = state.mode; keys = state.selected.slice(); display = raw; }
 
   if (mode !== "board" && keys.length === 0) { toast("Pick an agent (left) or @mention one.", true); return; }
   if (switched) renderConvo();
 
+  const quote = state.quote;
+  let message = display;
+  if (quote) {
+    message = `Regarding this excerpt from our conversation:\n"""\n${quote}\n"""\n\n` +
+      (display || "Say more about this — what should I take from it?");
+  }
+
   const images = state.attach ? [{ media_type: state.attach.media_type, data: state.attach.data }] : [];
   const imageDataUrl = state.attach ? state.attach.dataUrl : null;
-  inputEl.value = ""; autoGrow(inputEl); clearAttach();
-  ask(mode, keys, message, { images, imageDataUrl });
+  inputEl.value = ""; autoGrow(inputEl); clearAttach(); clearQuote();
+  ask(mode, keys, message, { images, imageDataUrl, display, quote });
+}
+
+// ---------- quote-from-selection ----------
+function showQuoteButton(rect) {
+  const btn = $("#quoteBtn");
+  const top = Math.max(8, rect.top - 36);
+  const left = Math.min(window.innerWidth - 90, Math.max(8, rect.left + rect.width / 2 - 34));
+  btn.style.top = top + "px"; btn.style.left = left + "px"; btn.style.display = "block";
+}
+function hideQuoteButton() { $("#quoteBtn").style.display = "none"; }
+
+function onSelectionChange() {
+  const sel = window.getSelection();
+  const text = (sel && sel.toString().trim()) || "";
+  const conv = $("#conversation");
+  if (text.length > 1 && sel.rangeCount && conv.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+    pendingQuote = text;
+    showQuoteButton(sel.getRangeAt(0).getBoundingClientRect());
+  } else { pendingQuote = null; hideQuoteButton(); }
+}
+
+function takeQuote() {
+  if (!pendingQuote) return;
+  state.quote = pendingQuote;
+  renderQuoteBar(); hideQuoteButton();
+  window.getSelection()?.removeAllRanges();
+  focusComposer();
+}
+function clearQuote() { state.quote = null; renderQuoteBar(); }
+function renderQuoteBar() {
+  const bar = $("#quoteBar");
+  if (!state.quote) { bar.hidden = true; bar.innerHTML = ""; return; }
+  bar.hidden = false; bar.innerHTML = "";
+  const text = state.quote.length > 220 ? state.quote.slice(0, 220) + "…" : state.quote;
+  const x = el("button", "attach-x", "✕"); x.title = "Remove quote"; x.onclick = clearQuote;
+  bar.append(el("span", "q-mark", "❝"), el("div", "q-text", text), x);
 }
 
 // ---------- image attachment ----------
@@ -444,6 +492,12 @@ function bindUI() {
   center.addEventListener("dragleave", (e) => { if (!center.contains(e.relatedTarget)) center.classList.remove("drag-over"); });
   center.addEventListener("drop", (e) => { e.preventDefault(); center.classList.remove("drag-over"); const f = e.dataTransfer.files[0]; if (f) setAttach(f); });
   document.addEventListener("paste", (e) => { const it = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith("image/")); if (it) setAttach(it.getAsFile()); });
+
+  // quote-from-selection
+  document.addEventListener("mouseup", () => setTimeout(onSelectionChange, 0));
+  document.addEventListener("mousedown", (e) => { if (e.target.id !== "quoteBtn") hideQuoteButton(); });
+  $("#conversation").addEventListener("scroll", hideQuoteButton);
+  $("#quoteBtn").addEventListener("click", takeQuote);
 }
 
 init();
