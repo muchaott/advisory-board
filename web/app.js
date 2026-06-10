@@ -48,15 +48,30 @@ function renderAgents() {
 }
 
 function onAgentClick(key) {
-  if (state.mode === "board") return;
+  if (state.mode === "board") { toast("Board mode uses all agents — just type your question."); return; }
   if (state.mode === "single") state.selected = [key];
   else { // chain: toggle, preserve order
     const i = state.selected.indexOf(key);
     if (i >= 0) state.selected.splice(i, 1); else state.selected.push(key);
   }
   paintSelection();
+  focusComposer();
 }
 function selectAgent(key) { state.selected = [key]; paintSelection(); }
+
+function shortName(key) {
+  const a = state.agents.find((x) => x.key === key);
+  return a ? a.name.replace(/^The /, "").replace(/"/g, "") : key;
+}
+function focusComposer() {
+  const i = $("#input");
+  if (state.pending) return;
+  const names = state.selected.map(shortName);
+  if (state.mode === "single" && names[0]) i.placeholder = `Ask the ${names[0]}…`;
+  else if (state.mode === "chain" && names.length) i.placeholder = `Ask ${names.join(" → ")}…`;
+  else i.placeholder = "Ask the board…  (@critic review this flow: …)";
+  i.focus();
+}
 
 function paintSelection() {
   document.querySelectorAll(".agent").forEach((c) => {
@@ -83,6 +98,7 @@ function setMode(m) {
   $("#modeHint").textContent = hints[m];
   if (m === "single" && state.selected.length > 1) state.selected = state.selected.slice(0, 1);
   paintSelection();
+  focusComposer();
 }
 
 // ---------- @mention parsing (mirror of the CLI) ----------
