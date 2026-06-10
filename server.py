@@ -77,6 +77,33 @@ async def api_brag(req: Request):
     return {"section": section, "entry": entry}
 
 
+@app.get("/api/brag/suggest")
+def api_brag_suggest():
+    import json as _json
+    import re
+    from datetime import datetime, timedelta
+    import llm
+    pm = A.resolve("pm")
+    recent = C.recent_activity((datetime.now() - timedelta(days=5)).date())
+    docs = C.agent_context()
+    prompt = (
+        "Scan my recent activity, calendar, and docs below. Propose up to 3 concrete, "
+        "promotion-worthy Brag Doc bullets for things I likely did recently but may not have "
+        "logged yet. Each <=24 words, lead with impact, grounded in the actual context — do NOT "
+        "invent. If nothing clear, return fewer or an empty array. Respond ONLY as a JSON array "
+        f"of strings.\n\nRECENT ACTIVITY:\n{recent}\n\nCONTEXT:\n{docs}"
+    )
+    raw = llm.complete(pm.system(docs), [{"role": "user", "content": prompt}], max_tokens=300, temperature=0.4)
+    out = []
+    m = re.search(r"\[.*\]", raw, re.S)
+    if m:
+        try:
+            out = [str(x).strip() for x in _json.loads(m.group(0)) if str(x).strip()][:3]
+        except Exception:
+            pass
+    return {"suggestions": out}
+
+
 @app.get("/api/morning")
 def api_morning():
     return {"questions": M.questions()}

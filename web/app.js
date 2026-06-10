@@ -294,8 +294,6 @@ function onSubmit(e) {
   const inputEl = $("#input"); const raw = inputEl.value.trim();
   if (!raw && !state.attach && !state.quote) return;
 
-  if (state.pending === "brag") { if (raw) doBrag(raw); inputEl.value = ""; cancelPending(); return; }
-
   const parsed = parseMentions(raw);
   let mode, keys, display, switched = false;
   if (parsed) {
@@ -388,7 +386,14 @@ async function doMorning() {
     clearEmpty();
     const form = el("div", "msg agent"); form.style.setProperty("--ac", "#f0b65e");
     const card = el("div", "mform");
-    card.append(el("h4", null, "☀ Morning check-in"));
+    card.append(el("h4", null, "☀ Good morning"));
+    const cal = el("div", "morning-cal", "Loading your day…");
+    card.append(cal);
+    fetch("/api/calendar").then((r) => r.json()).then((c) => {
+      const t = c.today || [];
+      cal.textContent = t.length ? "Today (" + t.length + "):\n" + t.map((x) => "• " + x).join("\n") : "No meetings today — clear runway.";
+    }).catch(() => { cal.remove(); });
+    card.append(el("div", "brag-label", "A few questions to set your focus (optional):"));
     qs.forEach((q, i) => {
       const mq = el("div", "mq");
       const lab = el("label", null, `${i + 1}. ${q}`); lab.htmlFor = `mq${i}`;
@@ -457,13 +462,45 @@ async function doSync() {
   } catch (e) { toast("sync failed: " + e.message, true); }
 }
 
-function startBrag() { state.pending = "brag"; const i = $("#input"); i.placeholder = "What did you do? (logged to your Brag Doc) — Esc to cancel"; i.focus(); $("#send").textContent = "＋"; }
-function cancelPending() { state.pending = null; focusComposer(); $("#send").textContent = "▶"; }
 async function doBrag(text) {
   try {
     const res = await (await fetch("/api/brag", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) })).json();
     toast(`Logged → ${res.section}`); loadActivity();
   } catch (e) { toast("brag failed: " + e.message, true); }
+}
+
+function bragPanel() {
+  clearEmpty();
+  const wrap = el("div", "msg agent"); wrap.style.setProperty("--ac", "#f0b65e");
+  const card = el("div", "mform");
+  card.append(el("h4", null, "＋ Log a win"));
+  const sugWrap = el("div", "brag-suggest");
+  sugWrap.append(el("div", "brag-loading", "Scanning your recent work for wins…"));
+  card.append(sugWrap);
+  const row = el("div", "mq");
+  const ta = el("textarea"); ta.id = "bragInput"; ta.rows = 2; ta.placeholder = "…or write your own win";
+  row.append(ta); card.append(row);
+  const actions = el("div", "mform-actions");
+  const save = el("button", "btn", "Log it");
+  const done = el("button", "btn ghost", "Done");
+  actions.append(save, done); card.append(actions);
+  wrap.append(card); $("#conversation").append(wrap); scrollDown();
+
+  done.onclick = () => wrap.remove();
+  save.onclick = async () => { const t = ta.value.trim(); if (!t) return; await doBrag(t); ta.value = ""; toast("Logged ✓"); };
+
+  fetch("/api/brag/suggest").then((r) => r.json()).then(({ suggestions }) => {
+    sugWrap.innerHTML = "";
+    if (!suggestions || !suggestions.length) { sugWrap.append(el("div", "brag-loading", "No obvious wins to suggest — log one below.")); return; }
+    sugWrap.append(el("div", "brag-label", "Suggested wins — tap to log:"));
+    suggestions.forEach((s) => {
+      const chip = el("div", "brag-chip");
+      chip.append(el("span", "brag-chip-text", s));
+      const add = el("button", "brag-add", "＋ Add");
+      add.onclick = async () => { add.disabled = true; add.textContent = "✓"; await doBrag(s); chip.classList.add("added"); };
+      chip.append(add); sugWrap.append(chip);
+    });
+  }).catch(() => { sugWrap.innerHTML = ""; });
 }
 
 // ---------- activity ----------
@@ -497,7 +534,6 @@ function bindUI() {
   input.addEventListener("input", () => autoGrow(input));
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSubmit(e); }
-    if (e.key === "Escape" && state.pending) cancelPending();
   });
   document.querySelectorAll(".act").forEach((b) => (b.onclick = () => {
     const a = b.dataset.action;
@@ -506,7 +542,7 @@ function bindUI() {
     else if (a === "morning") doMorning();
     else if (a === "weekly") doWeekly();
     else if (a === "sync") doSync();
-    else if (a === "brag") startBrag();
+    else if (a === "brag") bragPanel();
   }));
   $("#modalClose").onclick = () => ($("#modal").hidden = true);
   $("#modal").onclick = (e) => { if (e.target.id === "modal") $("#modal").hidden = true; };
