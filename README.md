@@ -32,12 +32,22 @@ missing or rejected, so you usually only set it once.
 
 ## Run
 
-Two interfaces, same backend:
+Same backend, three ways in:
 
-- **GUI app** (default) — **Advisory Board.app** in `~/Applications` (Spotlight /
-  Launchpad / Dock, roundtable icon). Opens a native window: agents rail · live
-  streaming conversation · activity timeline. Or `gui` alias / `./.venv/bin/python gui.py`.
+- **Menubar app** (default) — **Advisory Board.app** in `~/Applications` lives in
+  your menubar (roundtable icon) and owns the local server. Menu: **Open Board ·
+  Today · Quick Brag · Quick Ask · Quit**. Opens the window on launch.
+  - **Quick Brag / Quick Ask** — a tiny input from the menubar (or global hotkey),
+    so you capture a win or ask a question in seconds without hunting for a window.
+  - **Global hotkeys**: `⌃⌥B` Quick Brag, `⌃⌥A` Quick Ask. *Needs macOS
+    Accessibility permission* (System Settings → Privacy & Security → Accessibility
+    → enable "Advisory Board"). Menubar still works without it.
+  - **Notifications**: the weekly review posts a native notification when ready.
+- **Window only** — `gui` alias or `./.venv/bin/python gui.py` (server + window in one).
 - **CLI** — `board` alias, `launch-board.command`, or `./.venv/bin/python main.py`.
+
+Architecture: `menubar.py` (rumps) owns the FastAPI server and spawns the window
+as `gui.py --attach <port>`, so menubar + window + CLI all share one server/state.
 
 ### GUI overview
 
@@ -208,7 +218,8 @@ sync_gdoc.py     read-only Google Doc sync (1:1)
 deliver.py       Slack + email delivery
 main.py          CLI loop
 server.py        FastAPI: JSON + SSE API over the modules
-gui.py           pywebview launcher (native window)
+menubar.py       resident menubar app (owns server, quick capture, hotkeys)
+gui.py           pywebview window (own server, or --attach <port>)
 web/             dark SPA (index.html, app.js, styles.css)
 docs/            your working docs + brag-doc.md
 ```

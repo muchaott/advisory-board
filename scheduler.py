@@ -43,6 +43,13 @@ def write_review() -> Path:
             print(f"[deliver] {chan}: {status}")
     except Exception as e:
         print(f"[deliver] error: {type(e).__name__}: {e}")
+    try:
+        import subprocess
+        subprocess.run(["osascript", "-e",
+                        'display notification "Your weekly review is ready — open the board to read it." '
+                        'with title "Advisory Board"'], timeout=10)
+    except Exception:
+        pass
     return path
 
 

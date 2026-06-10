@@ -4,3 +4,5 @@ schedule>=1.2.0
 fastapi>=0.110.0
 uvicorn>=0.27.0
 pywebview>=6.0
+rumps>=0.4.0
+pynput>=1.7.0

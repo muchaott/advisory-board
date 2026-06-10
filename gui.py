@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import socket
+import sys
 import threading
 import time
 import urllib.request
@@ -42,8 +43,21 @@ def _wait(url: str, tries: int = 80) -> bool:
     return False
 
 
+def open_window(url: str):
+    """Open just the pywebview window at `url` (server already running elsewhere)."""
+    _wait(url)
+    import webview
+    webview.create_window("Advisory Board", url, width=1200, height=800, min_size=(940, 620))
+    webview.start()
+
+
 def main():
     os.chdir(ROOT)  # so `server:app` imports
+    # --attach PORT: window only, against an existing server (used by the menubar app)
+    if "--attach" in sys.argv:
+        port = sys.argv[sys.argv.index("--attach") + 1]
+        open_window(f"http://127.0.0.1:{port}/")
+        return
     port = _free_port()
     threading.Thread(target=_serve, args=(port,), daemon=True).start()
     url = f"http://127.0.0.1:{port}/"
