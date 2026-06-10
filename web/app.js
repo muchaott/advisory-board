@@ -28,15 +28,30 @@ function isBusy(vk) { return state.busyViews.has(vk ?? viewKey()); }
 function setBusy(vk, b) { if (b) state.busyViews.add(vk); else state.busyViews.delete(vk); updateComposerEnabled(); }
 function updateComposerEnabled() { const dis = isBusy(viewKey()); $("#send").disabled = dis; $("#input").disabled = dis; }
 
+// ---------- persistence ----------
+let saveTimer = null;
+function saveConvos() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    fetch("/api/conversations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(state.convos) }).catch(() => {});
+  }, 600);
+}
+function flushConvos() {
+  try { navigator.sendBeacon("/api/conversations", new Blob([JSON.stringify(state.convos)], { type: "application/json" })); } catch { /* ignore */ }
+}
+
 // ---------- init ----------
 async function init() {
   state.agents = await (await fetch("/api/agents")).json();
   state.agents.forEach((a) => (state.byName[a.name] = a.key));
+  try { state.convos = (await (await fetch("/api/conversations")).json()) || {}; } catch { state.convos = {}; }
   renderAgents();
   loadActivity();
   bindUI();
   if (state.agents[0]) { state.selected = [state.agents[0].key]; paintSelection(); }
   renderConvo();
+  window.addEventListener("pagehide", flushConvos);
+  window.addEventListener("beforeunload", flushConvos);
 }
 
 function renderAgents() {
@@ -268,6 +283,7 @@ async function ask(mode, keys, message, opts = {}) {
     startedKeys.forEach((k) => markSpeaking(k, false));
     setBusy(vk, false);
     loadActivity();
+    saveConvos();
   }
 }
 
@@ -363,7 +379,7 @@ function renderAttachBar() {
 }
 
 // ---------- quick actions ----------
-function pushAgentTurn(name, key, text) { convo().push({ t: "agent", key, name, text, reacting: null }); }
+function pushAgentTurn(name, key, text) { convo().push({ t: "agent", key, name, text, reacting: null }); saveConvos(); }
 
 async function doMorning() {
   const vk = viewKey(); setBusy(vk, true);
@@ -425,6 +441,14 @@ async function doToday() {
   } catch (e) { toast("calendar failed: " + e.message, true); }
 }
 
+function doNewChat() {
+  if (isBusy()) { toast("Wait for the current response to finish.", true); return; }
+  state.convos[viewKey()] = [];
+  renderConvo(); saveConvos();
+  if (state.mode === "single" && state.selected[0]) startChat(state.selected[0]);
+  else focusComposer();
+}
+
 async function doSync() {
   toast("Syncing Google Docs…");
   try {
@@ -477,7 +501,8 @@ function bindUI() {
   });
   document.querySelectorAll(".act").forEach((b) => (b.onclick = () => {
     const a = b.dataset.action;
-    if (a === "today") doToday();
+    if (a === "new") doNewChat();
+    else if (a === "today") doToday();
     else if (a === "morning") doMorning();
     else if (a === "weekly") doWeekly();
     else if (a === "sync") doSync();

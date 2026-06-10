@@ -24,6 +24,8 @@ import sync_gdoc as SY
 
 ROOT = Path(__file__).resolve().parent
 WEB = ROOT / "web"
+STATE_DIR = ROOT / "data"
+CONV_PATH = STATE_DIR / "conversations.json"
 
 app = FastAPI(title="Advisory Board")
 
@@ -135,6 +137,26 @@ def api_activity():
 @app.get("/api/calendar")
 def api_calendar():
     return {"today": G.calendar_today(), "upcoming": G.calendar_upcoming(7), "status": G.status()}
+
+
+@app.get("/api/conversations")
+def get_conversations():
+    if CONV_PATH.exists():
+        try:
+            return json.loads(CONV_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+@app.post("/api/conversations")
+async def save_conversations(req: Request):
+    body = await req.json()
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = CONV_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(body), encoding="utf-8")
+    tmp.replace(CONV_PATH)  # atomic
+    return {"ok": True}
 
 
 app.mount("/web", StaticFiles(directory=WEB), name="web")
