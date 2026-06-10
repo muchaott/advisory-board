@@ -48,6 +48,8 @@ Recreate the app launcher anytime:
 ```bash
 osacompile -o "$HOME/Applications/Advisory Board.app" \
   -e 'tell application "Terminal" to do script "cd ~/projects/advisory-board && ./.venv/bin/python main.py"'
+cp assets/roundtable.icns "$HOME/Applications/Advisory Board.app/Contents/Resources/applet.icns"
+touch "$HOME/Applications/Advisory Board.app"
 ```
 
 
