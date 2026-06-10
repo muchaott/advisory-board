@@ -209,7 +209,7 @@ function markSpeaking(key, on) {
   if (!card) return;
   card.classList.toggle("speaking", on);
   card.querySelector(".speaking-tag")?.remove();
-  if (on) card.append(el("div", "speaking-tag", "speaking…"));
+  if (on) { const tag = el("div", "speaking-tag"); for (let i = 0; i < 3; i++) tag.append(el("i")); card.append(tag); }
 }
 
 // ---------- ask (SSE stream) ----------
