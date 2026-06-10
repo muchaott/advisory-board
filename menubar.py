@@ -70,7 +70,33 @@ class BoardApp(rumps.App):
 
     def _boot(self):
         gui._wait(BASE + "/")
+        self._on_main(self._install_edit_menu)
         self._on_main(self.show_window)
+
+    def _install_edit_menu(self):
+        """A rumps app has no main menu, so ⌘C/⌘V/⌘A/⌘Z don't bind to anything.
+        Install a standard Edit menu (actions go down the responder chain to the
+        focused WKWebView) so copy/paste/select-all/undo work in the chat."""
+        from AppKit import NSMenu, NSMenuItem, NSApp
+        main = NSMenu.alloc().init()
+
+        app_item = NSMenuItem.alloc().init(); main.addItem_(app_item)
+        app_menu = NSMenu.alloc().init()
+        app_menu.addItemWithTitle_action_keyEquivalent_("Quit Advisory Board", "terminate:", "q")
+        app_item.setSubmenu_(app_menu)
+
+        edit_item = NSMenuItem.alloc().init(); main.addItem_(edit_item)
+        edit = NSMenu.alloc().initWithTitle_("Edit")
+        edit.addItemWithTitle_action_keyEquivalent_("Undo", "undo:", "z")
+        edit.addItemWithTitle_action_keyEquivalent_("Redo", "redo:", "Z")
+        edit.addItem_(NSMenuItem.separatorItem())
+        edit.addItemWithTitle_action_keyEquivalent_("Cut", "cut:", "x")
+        edit.addItemWithTitle_action_keyEquivalent_("Copy", "copy:", "c")
+        edit.addItemWithTitle_action_keyEquivalent_("Paste", "paste:", "v")
+        edit.addItemWithTitle_action_keyEquivalent_("Select All", "selectAll:", "a")
+        edit_item.setSubmenu_(edit)
+
+        NSApp.setMainMenu_(main)
 
     # ---- main-thread marshalling ----
     def _on_main(self, fn): self._mainq.append(fn)
