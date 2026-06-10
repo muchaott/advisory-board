@@ -2,7 +2,7 @@
 
 const COLORS = {
   strategist: "#3fd0c9", pm: "#f0b65e", mentor: "#b794f6",
-  ai: "#68d391", critic: "#fc8181", translator: "#63b3ed",
+  ai: "#68d391", critic: "#fc8181", translator: "#63b3ed", calendar: "#8b95c9",
 };
 const INITIALS = {
   strategist: "STR", pm: "PM", mentor: "MEN", ai: "AI", critic: "CRI", translator: "TRA",
@@ -287,6 +287,21 @@ async function doWeekly() {
   finally { setBusy(false); }
 }
 
+async function doToday() {
+  try {
+    const c = await (await fetch("/api/calendar")).json();
+    const lines = ["Today:"];
+    (c.today || []).forEach((t) => lines.push("  • " + t));
+    if (!(c.today || []).length) lines.push("  (nothing on the calendar)");
+    if ((c.upcoming || []).length) {
+      lines.push("", "Next 7 days:");
+      c.upcoming.slice(0, 12).forEach((t) => lines.push("  • " + t));
+    }
+    const { body } = addAgentBubble("Calendar", "calendar");
+    body.classList.remove("streaming"); body.textContent = lines.join("\n");
+  } catch (e) { toast("calendar failed: " + e.message, true); }
+}
+
 async function doSync() {
   toast("Syncing Google Docs…");
   try {
@@ -354,7 +369,8 @@ function bindUI() {
   });
   document.querySelectorAll(".act").forEach((b) => (b.onclick = () => {
     const a = b.dataset.action;
-    if (a === "morning") doMorning();
+    if (a === "today") doToday();
+    else if (a === "morning") doMorning();
     else if (a === "weekly") doWeekly();
     else if (a === "sync") doSync();
     else if (a === "brag") startBrag();

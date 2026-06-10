@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 import agents as A
 import context as C
+import gsuite as G
 import morning as M
 import orchestrator as O
 import scheduler as SCH
@@ -126,6 +127,11 @@ def _activity() -> list[dict]:
 @app.get("/api/activity")
 def api_activity():
     return _activity()
+
+
+@app.get("/api/calendar")
+def api_calendar():
+    return {"today": G.calendar_today(), "upcoming": G.calendar_upcoming(7), "status": G.status()}
 
 
 app.mount("/web", StaticFiles(directory=WEB), name="web")

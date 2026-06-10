@@ -37,7 +37,7 @@ def _build_user(agent: A.Agent, topic: str, transcript: list[tuple[str, str]]) -
 
 def ask(agent: A.Agent, topic: str, transcript: list[tuple[str, str]] | None = None) -> str:
     transcript = transcript or []
-    docs = C.load_docs() if agent.reads_docs else ""
+    docs = C.agent_context() if agent.reads_docs else ""
     user = _build_user(agent, topic, transcript)
     return llm.complete(agent.system(docs), [{"role": "user", "content": user}], deep=_deep(agent))
 
@@ -46,7 +46,7 @@ def ask(agent: A.Agent, topic: str, transcript: list[tuple[str, str]] | None = N
 
 def _ask_stream(agent: A.Agent, topic: str, transcript: list[tuple[str, str]]):
     """Yield text deltas for one agent's turn; appends its full reply to transcript."""
-    docs = C.load_docs() if agent.reads_docs else ""
+    docs = C.agent_context() if agent.reads_docs else ""
     user = _build_user(agent, topic, transcript)
     buf = []
     for delta in llm.stream(agent.system(docs), [{"role": "user", "content": user}], deep=_deep(agent)):
@@ -95,7 +95,7 @@ def run_stream(mode: str, keys: list[str], topic: str, history: list | None = No
         label = mentor.name + " (synthesis)"
         yield {"type": "agent_start", "agent": label, "key": mentor.key, "deep": _deep(mentor)}
         yield {"type": "reacting_to", "agent": label, "prior": "the board"}
-        docs = C.load_docs()
+        docs = C.agent_context()
         user = _build_user(mentor, synth_topic, transcript)
         for delta in llm.stream(mentor.system(docs), [{"role": "user", "content": user}], deep=_deep(mentor)):
             yield {"type": "token", "agent": label, "key": mentor.key, "text": delta}

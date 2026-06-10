@@ -31,7 +31,7 @@ def questions(n: int = 4) -> list[str]:
     pm = A.resolve("pm")
     today = datetime.now()
     recent = C.recent_activity((today - timedelta(days=3)).date())
-    docs = C.load_docs()
+    docs = C.agent_context()
     prompt = (
         f"It's {today.strftime('%A, %B %d')}. As my Design PM, ask me the {n} most important "
         "questions RIGHT NOW to set up a high-leverage day toward my L5 promotion. Base them on "
@@ -69,7 +69,7 @@ def plan(qa: list[tuple[str, str]]) -> str:
         "Under 150 words, direct, no fluff.\n\n"
         f"MY ANSWERS:\n{convo}"
     )
-    return llm.complete(pm.system(C.load_docs()), [{"role": "user", "content": prompt}],
+    return llm.complete(pm.system(C.agent_context()), [{"role": "user", "content": prompt}],
                         deep=O._deep(pm), max_tokens=500, temperature=0.4)
 
 

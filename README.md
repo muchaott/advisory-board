@@ -83,6 +83,26 @@ Drop PRDs, research, and your Brag Doc into `./docs` (Markdown/txt). The
 read-access agents get them as context. The PM appends categorized, dated
 bullets to `docs/brag-doc.md` whenever you run `/brag`.
 
+### Google Workspace access
+
+`gsuite.py` gives the board **read-only** access to your Google Workspace via the
+OAuth tokens Claude Code keeps in the macOS keychain — it never refreshes or
+writes them, so it can't break Claude's MCP auth.
+
+- **Calendar is wired into the board's context** (`context.agent_context()`):
+  today + the next 7 days, so the planning agents (Strategist / PM / Mentor) and
+  the morning check-in are schedule-aware. Cached ~5 min. **📆 Today** button +
+  `GET /api/calendar`.
+- **Docs** sync as before (`sync_gdoc.py`, the 1:1).
+- **All six MCPs reachable** via `gsuite.call(server, tool, args)` for
+  `calendar / docs / drive / sheets / slides / gmail` — available on demand;
+  Drive/Sheets/Slides/Gmail aren't auto-injected into every prompt (token cost).
+
+Limitation: those tokens expire ~daily and are refreshed when you use Claude.
+Google works **reliably while you're actively using the board**; the headless
+9am/Thursday jobs use it **best-effort** and fall back to local data if a token
+is stale (`gsuite.status()` shows which are live).
+
 ### Syncing a living Google Doc (e.g. the 1:1)
 
 `sync_gdoc.py` pulls configured Google Docs into `./docs` so the agents read the
@@ -180,6 +200,7 @@ context.py       loads ./docs; PM Brag Doc writer
 orchestrator.py  router + single / chain / boardroom (+ run_stream for the GUI)
 morning.py       weekday morning check-in
 scheduler.py     weekly Career Mentor review
+gsuite.py        read-only Google Workspace client (calendar wired into context)
 sync_gdoc.py     read-only Google Doc sync (1:1)
 deliver.py       Slack + email delivery
 main.py          CLI loop

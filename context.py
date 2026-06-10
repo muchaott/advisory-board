@@ -89,6 +89,24 @@ def recent_activity(since: date) -> str:
     return "\n\n".join(parts)
 
 
+def google_block() -> str:
+    """Live Google context (calendar) for the agents; '' if unavailable."""
+    try:
+        import gsuite
+        return gsuite.google_context()
+    except Exception:
+        return ""
+
+
+def agent_context() -> str:
+    """What the read-access agents see: local docs + live Google calendar."""
+    blocks = [load_docs()]
+    g = google_block()
+    if g:
+        blocks.append(g)
+    return "\n\n".join(b for b in blocks if b)
+
+
 SECTIONS = {
     "business impact": "## Business Impact",
     "ai leverage": "## AI Leverage",
