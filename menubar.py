@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Resident menubar app — the board's "always there" layer.
 
-Owns the FastAPI server, opens the full window on demand, and provides quick
-capture (Brag / Ask / Today) plus global hotkeys, so the board integrates into
-the day without hunting for a window.
+Single process: owns the FastAPI server, hosts the board window natively
+(WKWebView, so there's ONE Dock icon — "Advisory Board" — and clicking it
+reopens the window), and provides quick capture (Brag / Ask / Today) + global
+hotkeys.
 
 Hotkeys (need macOS Accessibility permission for this app):
   ⌃⌥B  Quick Brag      ⌃⌥A  Quick Ask
@@ -12,7 +13,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 import threading
 import urllib.request
@@ -22,11 +22,14 @@ os.chdir(ROOT)
 sys.path.insert(0, ROOT)
 
 import rumps
+import rumps.rumps as _rr
 import gui  # reuse _free_port / _serve / _wait
 
 PORT = gui._free_port()
 BASE = f"http://127.0.0.1:{PORT}"
 ICON = os.path.join(ROOT, "assets", "roundtable.png")
+
+_BOARD = None  # set to the running app instance
 
 
 def _get(path):
@@ -39,22 +42,35 @@ def _post(path, payload):
     return json.load(urllib.request.urlopen(req, timeout=90))
 
 
+# Dock-icon click on a running app fires "reopen" — re-show the window.
+class _ReopenApp(_rr.NSApp):
+    def applicationShouldHandleReopen_hasVisibleWindows_(self, sender, flag):
+        if _BOARD is not None:
+            _BOARD._on_main(_BOARD.show_window)
+        return True
+
+
+_rr.NSApp = _ReopenApp  # rumps instantiates this as its app delegate
+
+
 class BoardApp(rumps.App):
     def __init__(self):
         super().__init__("Advisory Board", icon=ICON if os.path.exists(ICON) else None,
                          title=None if os.path.exists(ICON) else "◎", quit_button=None)
-        self.win_proc = None
+        global _BOARD
+        _BOARD = self
+        self._window = None
         self._mainq = []
         self.menu = ["Open Board", "Today", None, "Quick Brag", "Quick Ask", None, "Quit"]
 
         threading.Thread(target=gui._serve, args=(PORT,), daemon=True).start()
         threading.Thread(target=self._boot, daemon=True).start()
-        rumps.Timer(self._drain, 0.25).start()   # run queued work on the main (Cocoa) thread
+        rumps.Timer(self._drain, 0.25).start()
         self._start_hotkeys()
 
     def _boot(self):
         gui._wait(BASE + "/")
-        self._on_main(self.open_window)
+        self._on_main(self.show_window)
 
     # ---- main-thread marshalling ----
     def _on_main(self, fn): self._mainq.append(fn)
@@ -67,20 +83,43 @@ class BoardApp(rumps.App):
             except Exception as e:
                 rumps.notification("Advisory Board", "error", str(e)[:90])
 
-    # ---- window ----
-    def open_window(self, _=None):
-        if self.win_proc and self.win_proc.poll() is None:
-            return
-        self.win_proc = subprocess.Popen([sys.executable, os.path.join(ROOT, "gui.py"), "--attach", str(PORT)])
+    # ---- native window (WKWebView, in-process) ----
+    def show_window(self, _=None):
+        from AppKit import NSApp
+        if self._window is None:
+            self._window = self._make_window()
+        self._window.makeKeyAndOrderFront_(None)
+        NSApp.activateIgnoringOtherApps_(True)
+
+    def _make_window(self):
+        from AppKit import (NSWindow, NSBackingStoreBuffered, NSWindowStyleMaskTitled,
+                            NSWindowStyleMaskClosable, NSWindowStyleMaskResizable,
+                            NSWindowStyleMaskMiniaturizable)
+        from WebKit import WKWebView, WKWebViewConfiguration
+        from Foundation import NSURL, NSURLRequest, NSMakeRect
+        mask = (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
+                | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable)
+        rect = NSMakeRect(0, 0, 1200, 800)
+        win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+            rect, mask, NSBackingStoreBuffered, False)
+        win.setTitle_("Advisory Board")
+        win.setReleasedWhenClosed_(False)  # closing hides; reopen re-shows
+        win.setMinSize_((940, 620))
+        wv = WKWebView.alloc().initWithFrame_configuration_(rect, WKWebViewConfiguration.alloc().init())
+        win.setContentView_(wv)
+        wv.loadRequest_(NSURLRequest.requestWithURL_(NSURL.URLWithString_(BASE + "/")))
+        win.center()
+        return win
 
     @rumps.clicked("Open Board")
-    def _open(self, _): self.open_window()
+    def _open(self, _): self.show_window()
 
     @rumps.clicked("Today")
     def _today(self, _):
         try:
             c = _get("/api/calendar"); t = c.get("today", [])
-            rumps.notification("Today", f"{len(t)} events", "\n".join(t[:6]) if t else "Nothing on the calendar — clear runway.")
+            rumps.notification("Today", f"{len(t)} events",
+                               "\n".join(t[:6]) if t else "Nothing on the calendar — clear runway.")
         except Exception as e:
             rumps.notification("Today", "error", str(e)[:90])
 
@@ -116,11 +155,8 @@ class BoardApp(rumps.App):
 
     @rumps.clicked("Quit")
     def _quit(self, _):
-        if self.win_proc and self.win_proc.poll() is None:
-            self.win_proc.terminate()
         rumps.quit_application()
 
-    # ---- global hotkeys (best-effort; needs Accessibility permission) ----
     def _start_hotkeys(self):
         try:
             from pynput import keyboard
@@ -130,7 +166,7 @@ class BoardApp(rumps.App):
             })
             self._hk.start()
         except Exception:
-            pass  # menubar still works without global hotkeys
+            pass
 
 
 if __name__ == "__main__":

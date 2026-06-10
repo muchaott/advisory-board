@@ -46,8 +46,10 @@ Same backend, three ways in:
 - **Window only** — `gui` alias or `./.venv/bin/python gui.py` (server + window in one).
 - **CLI** — `board` alias, `launch-board.command`, or `./.venv/bin/python main.py`.
 
-Architecture: `menubar.py` (rumps) owns the FastAPI server and spawns the window
-as `gui.py --attach <port>`, so menubar + window + CLI all share one server/state.
+Architecture: `menubar.py` (rumps) is a single process that owns the FastAPI
+server and hosts the board window natively (WKWebView) — so there's **one** Dock
+icon ("Advisory Board"); clicking it reopens the window (closing just hides it).
+`gui.py` remains a standalone pywebview launcher for the `gui` alias.
 
 ### GUI overview
 
