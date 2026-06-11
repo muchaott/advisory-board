@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Advisory Board -- local CLI.
 
-Talk to a board of 6 AI agents that coach your L4 -> L5 push.
+Talk to a board of 6 AI agents that help you grow as a designer and thought leader.
 
 Usage examples (type these at the prompt):
   @critic review this flow: a user taps a pending P2P payment and ...
@@ -26,7 +26,7 @@ BAR = "-" * 70
 
 def banner():
     print("\n=== SoFi Advisory Board ===")
-    print("L4 -> L5 coaching from 6 agents. /help for commands, /quit to exit.\n")
+    print("Design + thought-leadership coaching from 6 agents. /help for commands, /quit to exit.\n")
 
 
 def list_agents():

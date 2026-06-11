@@ -89,7 +89,7 @@ def api_brag_suggest():
     docs = C.agent_context()
     prompt = (
         "Scan my recent activity, calendar, and docs below. Propose up to 3 concrete, "
-        "promotion-worthy Brag Doc bullets for things I likely did recently but may not have "
+        "noteworthy Brag Doc bullets (growth in craft, impact, or influence) for things I likely did recently but may not have "
         "logged yet. Each <=24 words, lead with impact, grounded in the actual context — do NOT "
         "invent. If nothing clear, return fewer or an empty array. Respond ONLY as a JSON array "
         f"of strings.\n\nRECENT ACTIVITY:\n{recent}\n\nCONTEXT:\n{docs}"

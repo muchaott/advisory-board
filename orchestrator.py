@@ -101,7 +101,8 @@ def run_stream(mode: str, keys: list[str], topic: str, history: list | None = No
         mentor = A.resolve("mentor")
         synth_topic = (
             f"{topic}\n\n[Synthesize the board's discussion above into a clear "
-            f"recommendation: the 1-2 highest-leverage moves for my L5 case, and what to "
+            f"recommendation: the 1-2 highest-leverage moves for my growth as a designer and "
+            f"thought leader, and what to "
             f"ignore. Name the tradeoffs.]"
         )
         label = mentor.name + " (synthesis)"
@@ -146,8 +147,8 @@ def boardroom(topic: str, order: list[str] | None = None) -> list[tuple[str, str
     mentor = A.resolve("mentor")
     synth_topic = (
         f"{topic}\n\n[Synthesize the board's discussion above into a clear "
-        f"recommendation: the 1-2 highest-leverage moves for my L5 case, and what to "
-        f"ignore. Name the tradeoffs.]"
+        f"recommendation: the 1-2 highest-leverage moves for my growth as a designer and "
+        f"thought leader, and what to ignore. Name the tradeoffs.]"
     )
     transcript.append((mentor.name + " (synthesis)", ask(mentor, synth_topic, transcript)))
     return transcript
@@ -165,8 +166,8 @@ def pm_log(text: str) -> tuple[str, str]:
         "Categorize the following work update for my Brag Doc. Respond with ONLY a "
         "JSON object: {\"category\": one of [\"Business Impact\",\"AI Leverage\","
         "\"Cross-functional Influence\",\"Notes\"], \"entry\": a single crisp "
-        "promotion-worthy bullet (<=30 words, lead with impact)}. "
-        f"If it does not serve my L5 narrative, use category \"Notes\".\n\nUPDATE:\n{text}"
+        "noteworthy bullet (<=30 words, lead with impact)}. "
+        f"If it doesn't reflect growth in craft, impact, or influence, use category \"Notes\".\n\nUPDATE:\n{text}"
     )
     raw = llm.complete(pm.system(), [{"role": "user", "content": instruction}],
                        max_tokens=300, temperature=0.3)

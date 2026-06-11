@@ -1,7 +1,7 @@
 # Advisory Board
 
-A local, always-available board of 6 AI agents that coach my **L4 → L5** push at
-SoFi. Run it from the terminal, keep working docs in `./docs`, and ask the board
+A local, always-available board of 6 AI agents that help me grow as a **designer
+and thought leader** at SoFi. Run it from the terminal, keep working docs in `./docs`, and ask the board
 for strategy, critique, project tracking, and exec-ready framing. Runs on the
 SoFi llm-proxy (Claude); no personal API key or billing.
 
@@ -148,7 +148,7 @@ Every weekday at 09:00 a launchd job
 (`~/Library/LaunchAgents/com.mtang.advisory-board.morning.plist`) pops open the
 board and runs `/morning`: the PM asks a few **personalized** questions (drawn
 from recent activity + the 1:1 + current focus) to set up a high-leverage day,
-then synthesizes `TODAY'S FOCUS / SAY NO TO / L5 ANGLE` from your answers. Run it
+then synthesizes `TODAY'S FOCUS / SAY NO TO / GROWTH ANGLE` from your answers. Run it
 anytime in the CLI with `/morning` (aliases `/standup`, `/today`).
 
 ```bash

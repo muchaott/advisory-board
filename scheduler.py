@@ -59,14 +59,15 @@ def _pm_weekly_summary(since) -> str:
     activity = C.recent_activity(since)
     since_str = since.isoformat()
     prompt = (
-        "Produce my WEEKLY SUMMARY for promotion tracking, covering ONLY the important "
+        "Produce my WEEKLY SUMMARY for tracking my growth as a designer and thought leader, "
+        "covering ONLY the important "
         f"things I've done since last Thursday ({since_str}). Focus on what moved in that "
         "window; treat older work as background only and do not re-summarize it.\n\n"
         f"WHAT HAPPENED IN THIS WINDOW (since {since_str}):\n{activity}\n\n"
         "Write 3 short sections -- Business Impact, AI Leverage, Cross-functional "
         "Influence -- each with the key items from the window (2-4 bullets). Lead with "
         "impact. If the window is genuinely thin, say so plainly instead of padding. End "
-        "with 'Gaps:' listing what's missing for my L5 narrative.\n\n"
+        "with 'Gaps:' listing what would most deepen my craft, impact, and thought leadership.\n\n"
         f"FULL WORKING DOCS (background context only):\n{docs}"
     )
     return llm.complete(pm.system(docs), [{"role": "user", "content": prompt}],
