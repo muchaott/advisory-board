@@ -241,7 +241,7 @@ class BoardApp(rumps.App):
         self._mini.orderFront_(None)
         NSApp.activateIgnoringOtherApps_(True)
 
-    _SIZES = {"collapse": (76, 76), "orb": (76, 76), "hover": (300, 150),
+    _SIZES = {"collapse": (76, 76), "orb": (76, 76), "hover": (310, 250),
               "menu": (180, 170), "expand": (346, 478)}
 
     def _mini_action(self, action):

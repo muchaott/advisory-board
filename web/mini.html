@@ -20,12 +20,16 @@
     body.collapsed .badge.show { display: flex; }
 
     /* hover suggestions — appear to the LEFT of the orb, orb stays put */
-    .suggest { position: fixed; top: 6px; left: 8px; right: 78px; display: none; flex-direction: column; gap: 6px; }
+    .suggest { position: fixed; top: 6px; left: 8px; right: 78px; bottom: 8px; display: none; flex-direction: column; gap: 7px;
+      overflow-y: auto; scrollbar-width: none; }
+    .suggest::-webkit-scrollbar { width: 0; }
     body.collapsed.hover .suggest { display: flex; }
-    .sug-title { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--txt-faint); padding-left: 2px; }
-    .chip { background: rgba(20,24,43,.96); border: 1px solid var(--line); color: var(--txt); border-radius: 9px;
-      padding: 7px 10px; font-size: 12px; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.45); text-align: left; }
-    .chip:hover { border-color: var(--accent); }
+    .sug-title { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--txt-faint); padding-left: 2px; flex: none; }
+    #chips { display: flex; flex-direction: column; gap: 8px; }
+    .chip { background: rgba(20,24,43,.97); border: 1px solid var(--line); color: var(--txt); border-radius: 10px;
+      padding: 9px 11px; font-size: 12px; line-height: 1.35; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.45); text-align: left; }
+    .chip:hover { border-color: var(--accent); background: var(--bg-3); }
+    .chip:active { transform: scale(.985); }
     .chip.muted { color: var(--txt-faint); cursor: default; box-shadow: none; }
 
     /* right-click menu — below the orb */
