@@ -292,6 +292,8 @@ class BoardApp(rumps.App):
     # ---- chat: a separate window; the avatar always stays put ----
     def _open_chat(self, prompt=None):
         from AppKit import NSApp
+        if prompt is None and self._chat is not None and self._chat.isVisible():
+            self._close_chat(); return   # tapping the chat icon toggles open/closed
         if self._chat is None:
             self._chat, self._chat_wv = self._new_borderless(self.CHAT_W, self.CHAT_H, "/chat", True)
         self._position_chat()
