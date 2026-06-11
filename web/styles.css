@@ -14,6 +14,12 @@
 }
 
 * { box-sizing: border-box; }
+
+/* subtle scrollbars that blend with the dark UI */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,.10); border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.20); border: 3px solid transparent; background-clip: padding-box; }
 html, body { height: 100%; margin: 0; }
 body {
   font: 14px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
@@ -152,10 +158,11 @@ body {
 /* composer */
 .composer { display: flex; align-items: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); background: rgba(20,24,43,.6); }
 #input { flex: 1; resize: none; background: var(--bg-3); color: var(--txt); border: 1px solid var(--line);
-  border-radius: 11px; padding: 11px 13px; font: inherit; max-height: 160px; }
+  border-radius: 11px; padding: 11px 13px; font: inherit; max-height: 220px; overflow-y: auto; scrollbar-width: none; }
+#input::-webkit-scrollbar { width: 0; height: 0; display: none; }
 #input:focus { outline: none; border-color: var(--accent); }
 .send { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
-  background: var(--accent); color: #fff; border: 0; border-radius: 11px; cursor: pointer; font-size: 15px; line-height: 1; padding: 0; }
+  background: var(--accent); color: #fff; border: 0; border-radius: 11px; cursor: pointer; font-size: 19px; line-height: 1; padding: 0; }
 .send:hover { filter: brightness(1.08); }
 .send:disabled { opacity: .5; cursor: default; }
 

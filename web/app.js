@@ -220,9 +220,9 @@ function domUser(text, image, quote) {
   if (image) { const img = el("img", "msg-img"); img.src = image; m.append(img); }
   if (quote) m.append(el("div", "msg-quote", quote));
   if (text) m.append(el("div", null, text));
-  $("#conversation").append(m); scrollDown();
+  $("#conversation").append(m);
 }
-function domDivider(text) { clearEmpty(); const d = el("div", "divider"); d.append(el("span", null, text)); $("#conversation").append(d); scrollDown(); }
+function domDivider(text) { clearEmpty(); const d = el("div", "divider"); d.append(el("span", null, text)); $("#conversation").append(d); }
 
 function buildAgentBubble(name, key, reacting, streaming) {
   clearEmpty();
@@ -234,7 +234,7 @@ function buildAgentBubble(name, key, reacting, streaming) {
   const av = el("div", "av"); av.style.background = color(key);
   head.append(av, el("div", "bubble-name", name));
   const body = el("div", "bubble-body" + (streaming ? " streaming" : ""));
-  b.append(head, body); wrap.append(b); $("#conversation").append(wrap); scrollDown();
+  b.append(head, body); wrap.append(b); $("#conversation").append(wrap);
   return { wrap, body };
 }
 function addReacting(wrap, prior) { const r = el("div", "reacting"); r.innerHTML = `↑ reacting to <b>${escapeHtml(prior)}</b>`; wrap.insertBefore(r, wrap.firstChild); }
@@ -251,6 +251,7 @@ function renderConvo() {
   arr.forEach(renderTurn); scrollDown();
 }
 function scrollDown() { const c = $("#conversation"); c.scrollTop = c.scrollHeight; }
+function nearBottom() { const c = $("#conversation"); return c.scrollHeight - c.scrollTop - c.clientHeight < 90; }
 
 function markSpeaking(key, on) {
   const card = document.querySelector(`.agent[data-key="${key}"]`);
@@ -278,6 +279,7 @@ async function ask(mode, keys, message, opts = {}) {
     const disp = opts.display ?? message;
     domUser(disp, opts.imageDataUrl, opts.quote);
     arr.push({ t: "user", text: disp, image: opts.imageDataUrl || null, quote: opts.quote || null });
+    scrollDown();  // jump to the message you just sent
   } else clearEmpty();
 
   let body = null, wrap = null, reacting = null;
@@ -299,9 +301,9 @@ async function ask(mode, keys, message, opts = {}) {
         const line = chunk.split("\n").find((l) => l.startsWith("data: "));
         if (!line) continue;
         const ev = JSON.parse(line.slice(6));
-        if (ev.type === "agent_start") { reacting = null; startedKeys.add(ev.key); const r = buildAgentBubble(ev.agent, ev.key, null, true); wrap = r.wrap; body = r.body; markSpeaking(ev.key, true); }
+        if (ev.type === "agent_start") { const was = nearBottom(); reacting = null; startedKeys.add(ev.key); const r = buildAgentBubble(ev.agent, ev.key, null, true); wrap = r.wrap; body = r.body; markSpeaking(ev.key, true); if (was) scrollDown(); }
         else if (ev.type === "reacting_to" && wrap) { reacting = ev.prior; addReacting(wrap, ev.prior); }
-        else if (ev.type === "token" && body) { body.textContent += ev.text; if (body.isConnected) scrollDown(); }
+        else if (ev.type === "token" && body) { const was = nearBottom(); body.textContent += ev.text; if (body.isConnected && was) scrollDown(); }
         else if (ev.type === "agent_done") {
           body?.classList.remove("streaming"); markSpeaking(ev.key, false);
           if (body) arr.push({ t: "agent", key: ev.key, name: ev.agent, text: body.textContent, reacting });
@@ -523,7 +525,7 @@ function openModal(title, body) { $("#modalTitle").textContent = title; $("#moda
 function toast(msg, err) { const t = el("div", "toast" + (err ? " err" : ""), msg); $("#toasts").append(t); setTimeout(() => t.remove(), 4200); }
 
 // ---------- ui binding ----------
-function autoGrow(t) { t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; }
+function autoGrow(t) { t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 220) + "px"; }
 function bindUI() {
   $("#composer").addEventListener("submit", onSubmit);
 
