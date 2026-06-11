@@ -125,7 +125,7 @@ body {
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .empty-eg { font-size: 12px; margin-top: 8px; opacity: .8; }
 
-.msg { max-width: 86%; }
+.msg { max-width: 86%; overflow-wrap: anywhere; word-break: break-word; }
 .msg.user { align-self: flex-end; background: var(--accent); color: #fff; padding: 9px 13px; border-radius: 13px 13px 4px 13px; }
 .msg-img { display: block; max-width: 320px; max-height: 260px; border-radius: 9px; margin-bottom: 6px; border: 1px solid rgba(255,255,255,.25); }
 .msg.agent { align-self: flex-start; width: 100%; max-width: 100%; }
@@ -138,7 +138,7 @@ body {
 .bubble-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .bubble-head .av { width: 20px; height: 20px; font-size: 9px; }
 .bubble-name { font-weight: 650; font-size: 12.5px; color: var(--ac); }
-.bubble-body { white-space: pre-wrap; font-size: 13.5px; color: var(--txt); }
+.bubble-body { white-space: pre-wrap; font-size: 13.5px; color: var(--txt); overflow-wrap: anywhere; word-break: break-word; }
 .bubble-body.streaming::after { content: "▌"; color: var(--ac); animation: blink 1s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 
