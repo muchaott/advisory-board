@@ -46,6 +46,11 @@ def suggest():
     return FileResponse(WEB / "suggest.html")
 
 
+@app.get("/chat")
+def chat():
+    return FileResponse(WEB / "chat.html")
+
+
 @app.get("/api/agents")
 def api_agents():
     return [

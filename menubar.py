@@ -51,6 +51,8 @@ class MiniBridge(NSObject):
             action = str(body.objectForKey_("action"))
             if action == "move":
                 self._app._mini_move(float(body.objectForKey_("dx") or 0), float(body.objectForKey_("dy") or 0))
+            elif action == "moveChat":
+                self._app._move_chat(float(body.objectForKey_("dx") or 0), float(body.objectForKey_("dy") or 0))
             elif action == "ask":
                 self._app._ask_from_sug(str(body.objectForKey_("text") or ""))
             elif action == "orbHoverIn":
@@ -112,6 +114,8 @@ class BoardApp(rumps.App):
         self._mini_wv = None
         self._sug = None
         self._sug_wv = None
+        self._chat = None
+        self._chat_wv = None
         self._bridge = None
         self._sug_visible = False
         self._leave_ticks = 0
@@ -144,11 +148,13 @@ class BoardApp(rumps.App):
             self._on_main(lambda: rumps.notification("Morning brief failed", "", msg))
 
     def _show_morning(self):
-        rumps.notification("☀ Good morning", "Your morning brief is ready", "Tap the companion to read it")
-        self.show_mini()  # ensure the orb is up
+        rumps.notification("☀ Good morning", "Your morning brief is ready", "Tap the chat button to read it")
+        self.show_mini()  # ensure the avatar is up
         try:
             if self._mini_wv:
-                self._mini_wv.evaluateJavaScript_completionHandler_("window.__newBrief && window.__newBrief()", None)
+                self._mini_wv.evaluateJavaScript_completionHandler_("window.__badge && window.__badge(1)", None)
+            if self._chat_wv:  # refresh an already-open chat
+                self._chat_wv.evaluateJavaScript_completionHandler_("window.__newBrief && window.__newBrief()", None)
         except Exception:
             pass
 
@@ -261,37 +267,60 @@ class BoardApp(rumps.App):
         if self._bridge is None:
             self._bridge = MiniBridge.alloc().initWithApp_(self)
         if self._mini is None:
-            self._mini, self._mini_wv = self._new_borderless(76, 76, "/mini", True)
+            self._mini, self._mini_wv = self._new_borderless(84, 84, "/mini", True)   # avatar + chat button
             sf = self._mini.screen().visibleFrame() if self._mini.screen() else None
             if sf:
-                self._mini.setFrameOrigin_((sf.origin.x + sf.size.width - 120, sf.origin.y + sf.size.height - 120))
+                self._mini.setFrameOrigin_((sf.origin.x + sf.size.width - 124, sf.origin.y + sf.size.height - 124))
             self._sug, self._sug_wv = self._new_borderless(self.SUG_W, self.SUG_H, "/suggest", False)  # preloaded, hidden
         self._mini.orderFront_(None)
         NSApp.activateIgnoringOtherApps_(True)
 
-    _SIZES = {"collapse": (76, 76), "expand": (346, 478)}
+    CHAT_W, CHAT_H = 340, 470
 
     def _mini_action(self, action):
-        if not self._mini:
-            return
         if action == "board":
             self.show_window()
         elif action == "menu":
             self._show_ctx_menu()
         elif action == "hide":
             self._hide_mini()
-        elif action in self._SIZES:
-            self._mini_resize(action)
-            if action == "expand":
-                self._mini.makeKeyAndOrderFront_(None)
+        elif action == "openChat":
+            self._open_chat()
+        elif action == "closeChat":
+            self._close_chat()
 
-    def _mini_resize(self, action):
-        from Foundation import NSMakeRect
-        f = self._mini.frame()
-        right = f.origin.x + f.size.width
-        top = f.origin.y + f.size.height
-        w, h = self._SIZES.get(action, (76, 76))
-        self._mini.setFrame_display_animate_(NSMakeRect(right - w, top - h, w, h), True, True)
+    # ---- chat: a separate window; the avatar always stays put ----
+    def _open_chat(self, prompt=None):
+        from AppKit import NSApp
+        if self._chat is None:
+            self._chat, self._chat_wv = self._new_borderless(self.CHAT_W, self.CHAT_H, "/chat", True)
+        self._position_chat()
+        self._chat.makeKeyAndOrderFront_(None)
+        NSApp.activateIgnoringOtherApps_(True)
+        if self._mini_wv:
+            self._mini_wv.evaluateJavaScript_completionHandler_("window.__clearBadge && window.__clearBadge()", None)
+        if prompt and self._chat_wv:
+            self._chat_wv.evaluateJavaScript_completionHandler_("window.__ask(" + json.dumps(prompt) + ")", None)
+
+    def _close_chat(self):
+        if self._chat:
+            self._chat.orderOut_(None)
+
+    def _position_chat(self):
+        of = self._mini.frame()
+        x = of.origin.x - self.CHAT_W - 10
+        sf = self._mini.screen().visibleFrame() if self._mini.screen() else None
+        if sf and x < sf.origin.x + 6:                       # off the left edge → put it to the right
+            x = of.origin.x + of.size.width + 10
+        y = of.origin.y + of.size.height - self.CHAT_H
+        if sf and y < sf.origin.y + 6:
+            y = sf.origin.y + 6
+        self._chat.setFrameOrigin_((x, y))
+
+    def _move_chat(self, dx, dy):
+        if self._chat:
+            f = self._chat.frame()
+            self._chat.setFrameOrigin_((f.origin.x + dx, f.origin.y - dy))
 
     def _mini_move(self, dx, dy):
         f = self._mini.frame()
@@ -347,13 +376,13 @@ class BoardApp(rumps.App):
 
     def _ask_from_sug(self, text):
         self._hide_sug()
-        self._mini_resize("expand"); self._mini.makeKeyAndOrderFront_(None)
-        if self._mini_wv and text:
-            self._mini_wv.evaluateJavaScript_completionHandler_("window.__ask(" + json.dumps(text) + ")", None)
+        self._open_chat(prompt=text)
 
     def _hide_mini(self):
         if self._sug:
             self._sug_visible = False; self._sug.orderOut_(None)
+        if self._chat:
+            self._chat.orderOut_(None)
         if self._mini:
             self._mini.orderOut_(None)
 
