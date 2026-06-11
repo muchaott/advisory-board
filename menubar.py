@@ -2,7 +2,7 @@
 """Resident menubar app — the board's "always there" layer.
 
 Single process: owns the FastAPI server, hosts the board window natively
-(WKWebView, so there's ONE Dock icon — "Advisory Board" — and clicking it
+(WKWebView, so there's ONE Dock icon — "Yoda" — and clicking it
 reopens the window), and provides quick capture (Brag / Ask / Today) + global
 hotkeys.
 
@@ -104,7 +104,7 @@ _rr.NSApp = _ReopenApp  # rumps instantiates this as its app delegate
 
 class BoardApp(rumps.App):
     def __init__(self):
-        super().__init__("Advisory Board", icon=ICON if os.path.exists(ICON) else None,
+        super().__init__("Yoda", icon=ICON if os.path.exists(ICON) else None,
                          title=None if os.path.exists(ICON) else "◎", quit_button=None)
         global _BOARD
         _BOARD = self
@@ -172,7 +172,7 @@ class BoardApp(rumps.App):
 
         app_item = NSMenuItem.alloc().init(); main.addItem_(app_item)
         app_menu = NSMenu.alloc().init()
-        app_menu.addItemWithTitle_action_keyEquivalent_("Quit Advisory Board", "terminate:", "q")
+        app_menu.addItemWithTitle_action_keyEquivalent_("Quit Yoda", "terminate:", "q")
         app_item.setSubmenu_(app_menu)
 
         edit_item = NSMenuItem.alloc().init(); main.addItem_(edit_item)
@@ -197,7 +197,7 @@ class BoardApp(rumps.App):
             try:
                 fn()
             except Exception as e:
-                rumps.notification("Advisory Board", "error", str(e)[:90])
+                rumps.notification("Yoda", "error", str(e)[:90])
 
     # ---- native window (WKWebView, in-process) ----
     def show_window(self, _=None):
@@ -206,22 +206,29 @@ class BoardApp(rumps.App):
             self._window = self._make_window()
         self._window.makeKeyAndOrderFront_(None)
         NSApp.activateIgnoringOtherApps_(True)
+        self._push_avatar_state()  # sync the board's show/hide-avatar button
 
     def _make_window(self):
         from AppKit import (NSWindow, NSBackingStoreBuffered, NSWindowStyleMaskTitled,
                             NSWindowStyleMaskClosable, NSWindowStyleMaskResizable,
                             NSWindowStyleMaskMiniaturizable)
-        from WebKit import WKWebView, WKWebViewConfiguration
+        from WebKit import WKWebView, WKWebViewConfiguration, WKUserContentController
         from Foundation import NSURL, NSURLRequest, NSMakeRect
         mask = (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
                 | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable)
         rect = NSMakeRect(0, 0, 1200, 800)
         win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
             rect, mask, NSBackingStoreBuffered, False)
-        win.setTitle_("Advisory Board")
+        win.setTitle_("Yoda")
         win.setReleasedWhenClosed_(False)  # closing hides; reopen re-shows
         win.setMinSize_((940, 620))
-        wv = WKWebView.alloc().initWithFrame_configuration_(rect, WKWebViewConfiguration.alloc().init())
+        if self._bridge is None:
+            self._bridge = MiniBridge.alloc().initWithApp_(self)
+        conf = WKWebViewConfiguration.alloc().init()
+        ucc = WKUserContentController.alloc().init()
+        ucc.addScriptMessageHandler_name_(self._bridge, "host")  # lets the board toggle the avatar
+        conf.setUserContentController_(ucc)
+        wv = WKWebView.alloc().initWithFrame_configuration_(rect, conf)
         win.setContentView_(wv)
         wv.loadRequest_(NSURLRequest.requestWithURL_(NSURL.URLWithString_(BASE + "/")))
         win.center()
@@ -288,6 +295,10 @@ class BoardApp(rumps.App):
             self._open_chat()
         elif action == "closeChat":
             self._close_chat()
+        elif action == "enlargeChat":
+            self._enlarge_chat()
+        elif action == "toggleMini":
+            self._toggle_mini()
 
     # ---- chat: a separate window; the avatar always stays put ----
     def _open_chat(self, prompt=None):
@@ -308,6 +319,20 @@ class BoardApp(rumps.App):
         if self._chat:
             self._chat.orderOut_(None)
 
+    def _enlarge_chat(self):
+        """Open the full board on the chat's conversation, then close the chat.
+
+        chat.js has already POSTed the conversation to /api/handoff. A freshly
+        created board adopts it in init(); an already-open board is nudged to
+        adopt it now via JS.
+        """
+        existed = self._window is not None
+        self.show_window()
+        if existed and self._webview:
+            self._webview.evaluateJavaScript_completionHandler_(
+                "window.__adoptHandoff && window.__adoptHandoff()", None)
+        self._close_chat()
+
     def _position_chat(self):
         of = self._mini.frame()
         x = of.origin.x - self.CHAT_W - 10
@@ -327,8 +352,12 @@ class BoardApp(rumps.App):
     def _mini_move(self, dx, dy):
         f = self._mini.frame()
         self._mini.setFrameOrigin_((f.origin.x + dx, f.origin.y - dy))
-        if self._sug_visible:
-            self._position_sug()
+        if self._sug_visible:   # dismiss the suggestions popover rather than letting it trail the avatar
+            self._sug_visible = False
+            if self._sug:
+                self._sug.orderOut_(None)
+            if self._sug_wv:
+                self._sug_wv.evaluateJavaScript_completionHandler_("window.__out && window.__out()", None)
 
     # ---- hover → separate suggestions window (avatar window never changes) ----
     def _hover(self, who, on):
@@ -387,6 +416,22 @@ class BoardApp(rumps.App):
             self._chat.orderOut_(None)
         if self._mini:
             self._mini.orderOut_(None)
+        self._push_avatar_state()
+
+    def _toggle_mini(self):
+        if self._mini is not None and self._mini.isVisible():
+            self._hide_mini()
+        else:
+            self.show_mini()
+            self._push_avatar_state()
+
+    def _push_avatar_state(self):
+        """Reflect the avatar's visibility on the board's show/hide button."""
+        if not self._webview:
+            return
+        visible = bool(self._mini and self._mini.isVisible())
+        js = "window.__avatarState && window.__avatarState(%s)" % ("true" if visible else "false")
+        self._webview.evaluateJavaScript_completionHandler_(js, None)
 
     def _show_ctx_menu(self):
         from AppKit import NSMenu, NSEvent
@@ -431,7 +476,7 @@ class BoardApp(rumps.App):
             import orchestrator as O
             ans = O.ask(A.resolve("pm"), q)
             self._on_main(lambda: (rumps.notification("The board says", "", ans[:200]),
-                                   rumps.alert("Advisory Board", ans[:1800])))
+                                   rumps.alert("Yoda", ans[:1800])))
         except Exception as e:
             msg = str(e)[:90]
             self._on_main(lambda: rumps.notification("Ask failed", "", msg))

@@ -18,7 +18,7 @@ document.addEventListener("mousemove", (e) => {
   const dx = e.screenX - lastX, dy = e.screenY - lastY;
   if (dx || dy) { if (Math.abs(dx) + Math.abs(dy) > 2) moved = true; lastX = e.screenX; lastY = e.screenY; host("move", { dx, dy }); }
 });
-document.addEventListener("mouseup", (e) => { if (!dragging) return; dragging = false; if (!moved && e.button === 0) host("openChat"); });
+document.addEventListener("mouseup", (e) => { if (!dragging) return; dragging = false; if (!moved && e.button === 0) host("board"); });
 
 // chat button + right-click
 $("#chatbtn").addEventListener("click", (e) => { e.stopPropagation(); host("openChat"); });

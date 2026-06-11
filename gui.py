@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch the Advisory Board GUI.
+"""Launch the Yoda GUI.
 
 Starts the FastAPI server on a free localhost port in a background thread, then
 opens a native app window via pywebview. Falls back to the default browser if
@@ -47,7 +47,7 @@ def open_window(url: str):
     """Open just the pywebview window at `url` (server already running elsewhere)."""
     _wait(url)
     import webview
-    webview.create_window("Advisory Board", url, width=1200, height=800, min_size=(940, 620))
+    webview.create_window("Yoda", url, width=1200, height=800, min_size=(940, 620))
     webview.start()
 
 
@@ -64,7 +64,7 @@ def main():
     _wait(url)
     try:
         import webview
-        webview.create_window("Advisory Board", url, width=1200, height=800, min_size=(940, 620))
+        webview.create_window("Yoda", url, width=1200, height=800, min_size=(940, 620))
         webview.start()
     except Exception as e:
         print(f"[gui] pywebview unavailable ({e}); opening in browser: {url}")

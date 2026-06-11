@@ -22,6 +22,44 @@ def _deep(agent: A.Agent) -> bool:
     return agent.deep and DEEP_ENABLED
 
 
+# ---- routing (Career Mentor as concierge) --------------------------------
+
+def route(topic: str, history: list | None = None, images: list | None = None) -> str:
+    """The Career Mentor picks which board member should answer `topic`.
+
+    Returns a canonical agent key. Defaults to "mentor" (answers itself) for
+    career/leadership/growth/burnout topics or when the choice is unclear.
+    """
+    mentor = A.resolve("mentor")
+    roster = A.roster()
+    menu = "\n".join(f"- {a.key}: {a.name} — {a.goal}" for a in roster)
+    convo = ""
+    if history:
+        recent = [h for h in history if isinstance(h, (list, tuple)) and len(h) == 2][-6:]
+        if recent:
+            convo = "\n\nRECENT CONVERSATION:\n" + "\n".join(f"{s}: {t}" for s, t in recent)
+    instruction = (
+        "You are routing my message to the single best board member. Pick the one whose role "
+        "most directly fits. Choose \"mentor\" (yourself) for career, leadership, growth, "
+        "burnout, or 'am I focused on the right things' questions.\n\n"
+        f"BOARD MEMBERS:\n{menu}{convo}\n\nMY MESSAGE:\n{topic}\n\n"
+        "Respond with ONLY a JSON object: {\"agent\": \"<key>\"}."
+    )
+    keys = {a.key for a in roster}
+    try:
+        raw = llm.complete(mentor.system(), [{"role": "user", "content": instruction}],
+                           max_tokens=30, temperature=0)
+        m = re.search(r"\{.*\}", raw, re.S)
+        if m:
+            key = str(json.loads(m.group(0)).get("agent", "")).lower().lstrip("@")
+            resolved = A.resolve(key)
+            if resolved and resolved.key in keys:
+                return resolved.key
+    except Exception:
+        pass
+    return "mentor"
+
+
 def _build_user(agent: A.Agent, topic: str, transcript: list[tuple[str, str]]) -> str:
     if not transcript:
         return topic
@@ -76,7 +114,14 @@ def run_stream(mode: str, keys: list[str], topic: str, history: list | None = No
     """
     transcript: list[tuple[str, str]] = [(h[0], h[1]) for h in (history or []) if len(h) == 2]
 
-    if mode == "single":
+    if mode == "auto":
+        # Career Mentor concierge: pick the responder, tell the UI, then answer.
+        target = route(topic, history=history, images=images)
+        agent = A.resolve(target)
+        yield {"type": "routed", "key": agent.key, "name": agent.name}
+        order = [target]
+        synth = False
+    elif mode == "single":
         order = keys[:1]
         synth = False
     elif mode == "chain":

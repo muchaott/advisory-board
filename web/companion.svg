@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Baby Yoda companion">
+  <!-- background (fills the circular avatar crop) -->
+  <rect width="512" height="512" fill="#e9efe0"/>
+  <circle cx="256" cy="256" r="256" fill="#eef3e6"/>
+
+  <!-- ears: big, signature, pointing out -->
+  <g stroke="#7f9e63" stroke-width="6" stroke-linejoin="round">
+    <path d="M150 250 C70 250 18 196 30 196 C70 200 120 214 150 250 Z" fill="#bcd79d"/>
+    <path d="M362 250 C442 250 494 196 482 196 C442 200 392 214 362 250 Z" fill="#bcd79d"/>
+  </g>
+  <path d="M150 248 C92 244 56 210 60 210 C92 214 128 224 150 248 Z" fill="#e3d6b4" stroke="none"/>
+  <path d="M362 248 C420 244 456 210 452 210 C420 214 384 224 362 248 Z" fill="#e3d6b4" stroke="none"/>
+
+  <!-- head -->
+  <ellipse cx="256" cy="262" rx="142" ry="150" fill="#bcd79d" stroke="#7f9e63" stroke-width="7"/>
+  <!-- forehead wrinkle hint -->
+  <path d="M196 168 Q256 150 316 168" fill="none" stroke="#9bbb7c" stroke-width="6" stroke-linecap="round" opacity="0.7"/>
+
+  <!-- eyes: large, dark, high-contrast -->
+  <g>
+    <ellipse cx="206" cy="270" rx="40" ry="47" fill="#241f18"/>
+    <ellipse cx="306" cy="270" rx="40" ry="47" fill="#241f18"/>
+    <circle cx="221" cy="252" r="12" fill="#fff" opacity="0.95"/>
+    <circle cx="321" cy="252" r="12" fill="#fff" opacity="0.95"/>
+    <circle cx="198" cy="284" r="5" fill="#fff" opacity="0.6"/>
+    <circle cx="298" cy="284" r="5" fill="#fff" opacity="0.6"/>
+  </g>
+
+  <!-- nose -->
+  <path d="M242 318 Q256 332 270 318 Q256 326 242 318 Z" fill="#8aa86c"/>
+  <circle cx="248" cy="318" r="3.2" fill="#5f7a48"/>
+  <circle cx="264" cy="318" r="3.2" fill="#5f7a48"/>
+
+  <!-- mouth -->
+  <path d="M232 348 Q256 364 280 348" fill="none" stroke="#6f8a52" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- robe / collar -->
+  <path d="M150 430 C170 372 210 360 256 360 C302 360 342 372 362 430 Z" fill="#d8c6a0" stroke="#b7a47e" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M256 360 L236 404 L256 420 L276 404 Z" fill="#c8b58c"/>
+</svg>

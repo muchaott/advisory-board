@@ -9,6 +9,7 @@ const INITIALS = {
 };
 const color = (k) => COLORS[k] || "#7c8cf8";
 const MAX_THREAD = 12;
+const DEFAULT_AGENT = "mentor";  // Career Mentor — the concierge that routes
 
 // convos: viewKey -> [turn]. turn = {t:'user'|'agent'|'divider', ...}
 const state = { mode: "single", selected: [], agents: [], byName: {}, busyViews: new Set(), pending: null, convos: {}, attach: null, quote: null };
@@ -16,6 +17,9 @@ let pendingQuote = null;
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+function host(action, extra) { try { window.webkit.messageHandlers.host.postMessage(Object.assign({ action }, extra || {})); } catch { /* not native */ } }
+// Native pushes the avatar's real visibility here so the button label stays in sync.
+window.__avatarState = (visible) => { const b = $("#avatarToggle"); if (b) b.textContent = visible ? "◍ Hide avatar" : "◍ Show avatar"; };
 const escapeHtml = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
 // ---------- view + conversation store ----------
@@ -54,12 +58,34 @@ async function init() {
   renderAgents();
   loadActivity();
   bindUI();
-  if (state.agents[0]) { state.selected = [state.agents[0].key]; paintSelection(); }
+  // Career Mentor is the default agent for a new chat (it routes to specialists).
+  const def = state.agents.find((a) => a.key === DEFAULT_AGENT) || state.agents[0];
+  if (def) { state.selected = [def.key]; paintSelection(); }
   renderConvo();
   if (new URLSearchParams(location.search).get("morning")) showMorningBrief();
   window.addEventListener("pagehide", flushConvos);
   window.addEventListener("beforeunload", flushConvos);
+  await adoptHandoff();  // pick up a conversation handed over from the chat window
 }
+
+// ---------- handoff from the floating chat window ----------
+let adopting = false;
+async function adoptHandoff() {
+  if (adopting) return;
+  adopting = true;
+  try {
+    const h = await (await fetch("/api/handoff")).json();
+    if (!h || !Array.isArray(h.turns) || !h.turns.length) return;
+    const vk = h.viewKey || ("single:" + DEFAULT_AGENT);
+    const key = vk.startsWith("single:") ? vk.slice("single:".length) : DEFAULT_AGENT;
+    state.mode = "single"; state.selected = [key];
+    state.convos[vk] = h.turns;
+    paintSelection(); renderConvo(); updateComposerEnabled(); focusComposer();
+    saveConvos();
+  } catch { /* nothing to adopt */ }
+  finally { adopting = false; }
+}
+window.__adoptHandoff = adoptHandoff;
 
 async function showMorningBrief() {
   try {
@@ -94,7 +120,8 @@ function renderAgents() {
     const av = el("div", "av"); av.style.background = color(a.key);
     const meta = el("div", "agent-meta");
     meta.append(el("div", "agent-name", a.name.replace(/^The /, "")));
-    meta.append(el("div", "agent-goal", a.goal));
+    const goal = a.key === DEFAULT_AGENT ? a.goal + " · routes you to the right specialist" : a.goal;
+    meta.append(el("div", "agent-goal", goal));
     const badges = el("div", "badges");
     if (a.reads_docs) badges.append(el("span", "badge", "docs"));
     if (a.writes_brag) badges.append(el("span", "badge", "writes"));
@@ -161,7 +188,8 @@ function focusComposer() {
   const i = $("#input");
   if (state.pending) return;
   const names = state.selected.map(shortName);
-  if (state.mode === "single" && names[0]) i.placeholder = `Ask the ${names[0]}…`;
+  if (state.mode === "single" && state.selected[0] === DEFAULT_AGENT) i.placeholder = "Ask your Career Mentor — they'll bring in the right specialist…";
+  else if (state.mode === "single" && names[0]) i.placeholder = `Ask the ${names[0]}…`;
   else if (state.mode === "chain" && names.length) i.placeholder = `Ask ${names.join(" → ")}…`;
   else i.placeholder = "Ask the board…  (@critic review this flow: …)";
   i.focus();
@@ -280,7 +308,7 @@ async function ask(mode, keys, message, opts = {}) {
   if (isBusy(vk)) { toast("This conversation is still generating — switch agents or wait.", true); return; }
   setBusy(vk, true);
   const arr = convo();
-  const record = mode === "single";
+  const record = mode === "single" || mode === "auto";
   const startedKeys = new Set();
   const history = record
     ? arr.filter((x) => x.t === "user" || x.t === "agent").map((x) => [x.t === "user" ? "You" : x.name, x.text]).slice(-MAX_THREAD)
@@ -314,7 +342,13 @@ async function ask(mode, keys, message, opts = {}) {
         const line = chunk.split("\n").find((l) => l.startsWith("data: "));
         if (!line) continue;
         const ev = JSON.parse(line.slice(6));
-        if (ev.type === "agent_start") { const was = nearBottom(); reacting = null; startedKeys.add(ev.key); const r = buildAgentBubble(ev.agent, ev.key, null, true); wrap = r.wrap; body = r.body; markSpeaking(ev.key, true); if (was) scrollDown(); }
+        if (ev.type === "routed") {
+          if (ev.key !== DEFAULT_AGENT) {
+            const note = `Career Mentor → ${shortName(ev.key)}`;
+            domDivider(note); arr.push({ t: "divider", text: note });
+          }
+        }
+        else if (ev.type === "agent_start") { const was = nearBottom(); reacting = null; startedKeys.add(ev.key); const r = buildAgentBubble(ev.agent, ev.key, null, true); wrap = r.wrap; body = r.body; markSpeaking(ev.key, true); if (was) scrollDown(); }
         else if (ev.type === "reacting_to" && wrap) { reacting = ev.prior; addReacting(wrap, ev.prior); }
         else if (ev.type === "token" && body) { const was = nearBottom(); body.textContent += ev.text; if (body.isConnected && was) scrollDown(); }
         else if (ev.type === "agent_done") {
@@ -348,7 +382,11 @@ function onSubmit(e) {
     if (keys.length) { state.selected = keys; paintSelection(); switched = true; }
   } else { mode = state.mode; keys = state.selected.slice(); display = raw; }
 
-  if (mode !== "board" && keys.length === 0) { toast("Pick an agent (left) or @mention one.", true); return; }
+  // Career Mentor concierge: on the default Mentor view (no explicit @mention),
+  // route each message to the best specialist (or the Mentor answers itself).
+  if (!parsed && mode === "single" && keys.length === 1 && keys[0] === DEFAULT_AGENT) mode = "auto";
+
+  if (mode !== "board" && mode !== "auto" && keys.length === 0) { toast("Pick an agent (left) or @mention one.", true); return; }
   if (switched) renderConvo();
 
   const quote = state.quote;
@@ -560,6 +598,7 @@ function bindUI() {
     if (a === "new") doNewChat();
     else if (a === "morning") doMorning();
     else if (a === "brag") bragPanel();
+    else if (a === "toggle-avatar") host("toggleMini");
   }));
   $("#modalClose").onclick = () => ($("#modal").hidden = true);
   $("#modal").onclick = (e) => { if (e.target.id === "modal") $("#modal").hidden = true; };

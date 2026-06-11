@@ -98,12 +98,18 @@ def google_block() -> str:
         return ""
 
 
+def google_files_block() -> str:
+    """Curated important Google files (Sheets/Docs) for the agents; '' if none."""
+    try:
+        import gsuite
+        return gsuite.important_files_context()
+    except Exception:
+        return ""
+
+
 def agent_context() -> str:
-    """What the read-access agents see: local docs + live Google calendar."""
-    blocks = [load_docs()]
-    g = google_block()
-    if g:
-        blocks.append(g)
+    """What read-access agents see: local docs + live calendar + key Google files."""
+    blocks = [load_docs(), google_block(), google_files_block()]
     return "\n\n".join(b for b in blocks if b)
 
 

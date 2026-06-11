@@ -15,6 +15,13 @@ import os
 import subprocess
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent / ".env")
+except Exception:
+    pass
 
 SERVERS = {
     "calendar": "google-calendar", "docs": "google-docs", "drive": "google-drive",
@@ -24,6 +31,11 @@ SERVERS = {
 _CACHE: dict = {}          # server -> (token, url)
 _CTX_CACHE = {"text": None, "ts": 0.0}
 _CTX_TTL = 300             # seconds
+
+_FILES_CACHE = {"text": None, "ts": 0.0}   # important_files_context()
+_FILES_TTL = 300                            # seconds
+_FILES_PER = 14_000                         # char cap per file
+_FILE_LAST_GOOD: dict = {}                  # id -> last successful markdown
 
 
 def _creds(server: str):
@@ -154,6 +166,101 @@ def google_context(force: bool = False) -> str:
         text = "\n".join(parts)
     _CTX_CACHE["text"] = text
     _CTX_CACHE["ts"] = time.time()
+    return text
+
+
+# ---- important files (curated live context: Sheets + Docs) -------------
+
+def _para(p: dict) -> str:
+    return "".join(e.get("textRun", {}).get("content", "") for e in p.get("elements", [])).rstrip("\n")
+
+
+def doc_markdown(doc_id: str) -> str | None:
+    """Plain-markdown text of a Google Doc, or None if unavailable."""
+    doc = call("docs", "getDocument", {"documentId": doc_id})
+    if not isinstance(doc, dict) or "error" in doc:
+        return None
+    out = [f"# {doc.get('title', '(untitled)')}", ""]
+    for el in doc.get("body", {}).get("content", []):
+        if "paragraph" in el:
+            out.append(_para(el["paragraph"]))
+        elif "table" in el:
+            for row in el["table"].get("tableRows", []):
+                cells = []
+                for c in row.get("tableCells", []):
+                    txt = "".join(_para(ce["paragraph"]) + " "
+                                  for ce in c.get("content", []) if "paragraph" in ce)
+                    cells.append(txt.strip())
+                out.append(" | ".join(cells))
+    return "\n".join(out).strip()
+
+
+def sheet_markdown(sid: str, max_rows: int = 60, max_cols: int = 30) -> str | None:
+    """Render a Google Sheet's tabs as markdown pipe tables, or None."""
+    meta = call("sheets", "getSpreadsheet", {"spreadsheetId": sid})
+    if not isinstance(meta, dict) or "error" in meta:
+        return None
+    title = meta.get("properties", {}).get("title", "(untitled sheet)")
+    tabs = [s.get("properties", {}).get("title") for s in meta.get("sheets", [])]
+    out = [f"# {title}"]
+    for tab in tabs:
+        if not tab:
+            continue
+        v = call("sheets", "getValues", {"spreadsheetId": sid, "range": tab})
+        rows = v.get("values", []) if isinstance(v, dict) else []
+        out.append(f"\n## {tab}")
+        if not rows:
+            out.append("(empty)")
+            continue
+        for r in rows[:max_rows]:
+            cells = [str(c) for c in r[:max_cols]]
+            out.append(" | ".join(cells))
+        if len(rows) > max_rows:
+            out.append(f"… (+{len(rows) - max_rows} more rows)")
+    return "\n".join(out).strip()
+
+
+def _gfiles() -> list[tuple[str, str, str]]:
+    """Parse GFILES env: 'type:id:label, type:id:label' -> [(type, id, label)]."""
+    out = []
+    for item in (os.getenv("GFILES", "") or "").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        parts = item.split(":")
+        if len(parts) < 2:
+            continue
+        ftype = parts[0].strip().lower()
+        fid = parts[1].strip()
+        label = (":".join(parts[2:]).strip() if len(parts) > 2 else fid)
+        if ftype in ("sheet", "doc") and fid:
+            out.append((ftype, fid, label))
+    return out
+
+
+def important_files_context(force: bool = False) -> str:
+    """Curated Google files (Sheets/Docs) rendered for agent context.
+
+    Cached ~5 min. Each file falls back to its last-good copy on a transient
+    failure, so a stale token degrades gracefully instead of dropping content.
+    """
+    if (not force and _FILES_CACHE["text"] is not None
+            and (time.time() - _FILES_CACHE["ts"]) < _FILES_TTL):
+        return _FILES_CACHE["text"]
+    blocks = []
+    for ftype, fid, label in _gfiles():
+        md = sheet_markdown(fid) if ftype == "sheet" else doc_markdown(fid)
+        if md:
+            _FILE_LAST_GOOD[fid] = md
+        else:
+            md = _FILE_LAST_GOOD.get(fid)  # keep last good copy if fetch failed
+        if md:
+            if len(md) > _FILES_PER:
+                md = md[:_FILES_PER] + "\n… [truncated]"
+            blocks.append(f"### {label}\n{md}")
+    text = ("MY KEY GOOGLE FILES (live, read-only):\n\n" + "\n\n".join(blocks)) if blocks else ""
+    _FILES_CACHE["text"] = text
+    _FILES_CACHE["ts"] = time.time()
     return text
 
 

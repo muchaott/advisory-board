@@ -76,7 +76,7 @@ async def api_ask(req: Request):
     message = (body.get("message") or "").strip()
     history = body.get("history") or []
     images = body.get("images") or []
-    if (not message and not images) or (mode != "board" and not keys):
+    if (not message and not images) or (mode not in ("board", "auto") and not keys):
         return JSONResponse({"error": "need a message and at least one agent"}, status_code=400)
     if not message:
         message = "(see attached image)"
@@ -245,6 +245,26 @@ async def save_conversations(req: Request):
     tmp.write_text(json.dumps(body), encoding="utf-8")
     tmp.replace(CONV_PATH)  # atomic
     return {"ok": True}
+
+
+_HANDOFF: dict = {"data": None}
+
+
+@app.post("/api/handoff")
+async def post_handoff(req: Request):
+    """Stash a chat conversation so the big board can adopt it (single-shot)."""
+    body = await req.json()
+    _HANDOFF["data"] = {"viewKey": body.get("viewKey") or "single:mentor",
+                        "turns": body.get("turns") or []}
+    return {"ok": True}
+
+
+@app.get("/api/handoff")
+def get_handoff():
+    """Return the pending handoff once, then clear it."""
+    data = _HANDOFF["data"]
+    _HANDOFF["data"] = None
+    return data or {}
 
 
 @app.get("/api/agent-order")

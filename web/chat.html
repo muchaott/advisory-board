@@ -33,6 +33,8 @@
     .mb { font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
     .mb.you { align-self: flex-end; background: var(--accent); color: var(--accent-ink); padding: 7px 11px; border-radius: 12px 12px 4px 12px; max-width: 85%; }
     .mb.bot { align-self: flex-start; color: var(--txt); border-left: 3px solid #9ccb6a; padding-left: 10px; max-width: 96%; }
+    .mb-name { font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: #9ccb6a; margin-bottom: 3px; }
+    .mb.note { align-self: center; font-size: 11px; color: var(--txt-faint); font-style: italic; padding: 1px 0; }
     .mb.bot.streaming::after { content: "▌"; color: #9ccb6a; animation: blink 1s steps(2) infinite; }
     @keyframes blink { 50% { opacity: 0; } }
     .composer { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); }
@@ -48,8 +50,8 @@
 <body>
   <div class="panel" id="panel">
     <div class="p-head" id="head">
-      <img class="p-av" src="/web/companion.png" alt="" />
-      <div><div class="p-name">Advisory Board</div><div class="p-sub">your companion</div></div>
+      <img class="p-av" src="/web/companion.svg" alt="" />
+      <div><div class="p-name">Career Mentor</div><div class="p-sub">brings in the right specialist</div></div>
       <button class="p-btn p-enlarge" id="enlarge" title="Open full board">⤢</button>
       <button class="p-btn p-close" id="close" title="Close">✕</button>
     </div>
