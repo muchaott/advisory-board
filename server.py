@@ -188,7 +188,10 @@ def api_suggestions():
         "words, imperative, specific to my actual context (name the project/meeting). "
         "Respond ONLY as a JSON array of 3 strings.\n\nRECENT:\n" + recent
     )
-    raw = llm.complete(pm.system(docs), [{"role": "user", "content": prompt}], max_tokens=200, temperature=0.5)
+    try:
+        raw = llm.complete(pm.system(docs), [{"role": "user", "content": prompt}], max_tokens=200, temperature=0.5)
+    except Exception:
+        return {"suggestions": _SUG["items"]}  # keep last good set on a transient proxy error
     items, m = [], re.search(r"\[.*\]", raw, re.S)
     if m:
         try:
