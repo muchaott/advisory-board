@@ -60,13 +60,42 @@ class BoardApp(rumps.App):
         global _BOARD
         _BOARD = self
         self._window = None
+        self._webview = None
         self._mainq = []
         self.menu = ["Open Board", "Today", None, "Quick Brag", "Quick Ask", None, "Quit"]
 
+        self._last_morning = None
         threading.Thread(target=gui._serve, args=(PORT,), daemon=True).start()
         threading.Thread(target=self._boot, daemon=True).start()
         rumps.Timer(self._drain, 0.25).start()
+        rumps.Timer(self._tick, 45).start()   # checks for the 9am morning brief
         self._start_hotkeys()
+
+    def _tick(self, _):
+        from datetime import datetime
+        now = datetime.now()
+        today = now.strftime("%Y-%m-%d")
+        if now.hour == 9 and self._last_morning != today:
+            self._last_morning = today
+            threading.Thread(target=self._morning, daemon=True).start()
+
+    def _morning(self):
+        try:
+            import morning
+            morning.write_brief()
+            self._on_main(lambda: (
+                rumps.notification("☀ Good morning", "Your morning brief is ready", "Opening the board…"),
+                self._show_morning()))
+        except Exception as e:
+            self._on_main(lambda: rumps.notification("Morning brief failed", "", str(e)[:90]))
+
+    def _show_morning(self):
+        self.show_window()
+        try:
+            from Foundation import NSURL, NSURLRequest
+            self._webview.loadRequest_(NSURLRequest.requestWithURL_(NSURL.URLWithString_(BASE + "/?morning=1")))
+        except Exception:
+            pass
 
     def _boot(self):
         gui._wait(BASE + "/")
@@ -135,6 +164,7 @@ class BoardApp(rumps.App):
         win.setContentView_(wv)
         wv.loadRequest_(NSURLRequest.requestWithURL_(NSURL.URLWithString_(BASE + "/")))
         win.center()
+        self._webview = wv
         return win
 
     @rumps.clicked("Open Board")

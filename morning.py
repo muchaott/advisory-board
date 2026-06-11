@@ -11,9 +11,13 @@ then synthesizes today's focus from your answers.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from datetime import datetime, timedelta
+from pathlib import Path
+
+REVIEWS_DIR = Path(__file__).resolve().parent / "reviews"
 
 import agents as A
 import context as C
@@ -73,6 +77,34 @@ def plan(qa: list[tuple[str, str]]) -> str:
     )
     return llm.complete(pm.system(C.agent_context()), [{"role": "user", "content": prompt}],
                         deep=O._deep(pm), max_tokens=500, temperature=0.4)
+
+
+def brief() -> str:
+    """A short, non-interactive morning brief (calendar + focus + one question)."""
+    pm = A.resolve("pm")
+    docs = C.agent_context()
+    recent = C.recent_activity((datetime.now() - timedelta(days=3)).date())
+    today = datetime.now().strftime("%A, %B %d")
+    prompt = (
+        f"It's {today}. Write me a warm, sharp morning brief as my Design PM, using my "
+        "calendar, recent work, and 1:1. Structure exactly:\n"
+        "A one-line greeting.\n"
+        "YOUR DAY: 1-2 lines on the shape of today from my calendar.\n"
+        "FOCUS: the 1-2 highest-leverage things to push on today (specific to my work).\n"
+        "ONE QUESTION: a single sharp question to set my intention.\n"
+        "Under 150 words. Warm but direct, no fluff, no preamble.\n\n"
+        f"RECENT ACTIVITY:\n{recent}"
+    )
+    return llm.complete(pm.system(docs), [{"role": "user", "content": prompt}],
+                        deep=O._deep(pm), max_tokens=500, temperature=0.5)
+
+
+def write_brief() -> str:
+    """Generate today's brief and save it to reviews/morning-<date>.md."""
+    out = brief()
+    REVIEWS_DIR.mkdir(exist_ok=True)
+    (REVIEWS_DIR / f"morning-{datetime.now().strftime('%Y-%m-%d')}.md").write_text(out, encoding="utf-8")
+    return out
 
 
 def run(interactive: bool | None = None) -> str:

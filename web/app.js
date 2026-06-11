@@ -56,8 +56,21 @@ async function init() {
   bindUI();
   if (state.agents[0]) { state.selected = [state.agents[0].key]; paintSelection(); }
   renderConvo();
+  if (new URLSearchParams(location.search).get("morning")) showMorningBrief();
   window.addEventListener("pagehide", flushConvos);
   window.addEventListener("beforeunload", flushConvos);
+}
+
+async function showMorningBrief() {
+  try {
+    const b = await (await fetch("/api/morning-brief")).json();
+    if (!b || !b.text) return;
+    clearEmpty();
+    domDivider("☀ Morning brief — " + (b.date || ""));
+    const { body } = buildAgentBubble("Morning brief", "pm", null, false);
+    body.textContent = b.text;
+    scrollDown();
+  } catch { /* ignore */ }
 }
 
 function renderAgents() {

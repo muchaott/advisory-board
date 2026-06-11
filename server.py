@@ -162,6 +162,15 @@ def api_activity():
     return _activity()
 
 
+@app.get("/api/morning-brief")
+def api_morning_brief():
+    today = datetime.now().strftime("%Y-%m-%d")
+    p = ROOT / "reviews" / f"morning-{today}.md"
+    if p.exists():
+        return {"date": today, "text": p.read_text(encoding="utf-8", errors="replace")}
+    return {"date": today, "text": None}
+
+
 @app.get("/api/calendar")
 def api_calendar():
     return {"today": G.calendar_today(), "upcoming": G.calendar_upcoming(7), "status": G.status()}
