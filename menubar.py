@@ -271,7 +271,7 @@ class BoardApp(rumps.App):
             sf = self._mini.screen().visibleFrame() if self._mini.screen() else None
             if sf:
                 self._mini.setFrameOrigin_((sf.origin.x + sf.size.width - 124, sf.origin.y + sf.size.height - 124))
-            self._sug, self._sug_wv = self._new_borderless(self.SUG_W, self.SUG_H, "/suggest", False)  # preloaded, hidden
+            self._sug, self._sug_wv = self._new_borderless(self.SUG_W, self.SUG_H, "/suggest", True)  # keyable → proper pointer cursor
         self._mini.orderFront_(None)
         NSApp.activateIgnoringOtherApps_(True)
 
