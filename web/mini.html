@@ -6,21 +6,40 @@
   <title>Companion</title>
   <link rel="stylesheet" href="/web/styles.css" />
   <style>
-    html, body { background: transparent !important; margin: 0; height: 100%; overflow: hidden; }
+    html, body { background: transparent !important; margin: 0; height: 100%; overflow: hidden;
+      -webkit-user-select: none; user-select: none; }
 
-    /* ---- orb (collapsed) ---- */
-    .orb { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; }
-    body.collapsed .orb { display: flex; }
-    .orb-btn { width: 60px; height: 60px; border-radius: 50%; border: 2px solid rgba(255,255,255,.6);
-      background-image: url("/web/companion.png"); background-size: cover; cursor: pointer;
-      box-shadow: 0 4px 16px rgba(0,0,0,.4); }
-    .orb-btn:active { transform: scale(.95); }
-    .badge { position: fixed; top: 6px; right: 6px; min-width: 20px; height: 20px; border-radius: 10px;
+    /* ---- avatar orb ---- */
+    .orb { position: fixed; border-radius: 50%; cursor: grab;
+      background: url("/web/companion.png") center/cover; box-shadow: 0 5px 18px rgba(0,0,0,.45); }
+    body.collapsed .orb { inset: 0; }                         /* fills container → big */
+    body.collapsed.hover .orb, body.collapsed.menu .orb {     /* shrink to corner */
+      inset: auto; top: 9px; right: 9px; width: 62px; height: 62px; border: 2px solid rgba(255,255,255,.65); }
+    body.expanded .orb { display: none; }
+    .orb:active { cursor: grabbing; }
+    .badge { position: fixed; top: 4px; right: 4px; min-width: 22px; height: 22px; border-radius: 11px;
       background: #ff3b30; color: #fff; font-size: 12px; font-weight: 700; display: none; align-items: center;
-      justify-content: center; padding: 0 5px; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+      justify-content: center; padding: 0 6px; box-shadow: 0 1px 5px rgba(0,0,0,.5); }
     body.collapsed .badge.show { display: flex; }
 
-    /* ---- panel (expanded) ---- */
+    /* ---- hover suggestions ---- */
+    .suggest { position: fixed; top: 10px; left: 10px; right: 84px; bottom: 10px; display: none;
+      flex-direction: column; gap: 6px; }
+    body.collapsed.hover .suggest { display: flex; }
+    .sug-title { font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; color: var(--txt-faint); }
+    .chip { background: rgba(20,24,43,.94); border: 1px solid var(--line); color: var(--txt); border-radius: 9px;
+      padding: 7px 10px; font-size: 12px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+    .chip:hover { border-color: var(--accent); }
+    .chip.muted { color: var(--txt-faint); cursor: default; box-shadow: none; }
+
+    /* ---- right-click menu ---- */
+    .ctx { position: fixed; top: 10px; left: 10px; display: none; background: var(--bg-2);
+      border: 1px solid var(--line); border-radius: 9px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+    body.collapsed.menu .ctx { display: block; }
+    .ctx div { padding: 8px 14px; font-size: 12.5px; cursor: pointer; }
+    .ctx div:hover { background: var(--bg-3); }
+
+    /* ---- expanded panel ---- */
     .panel { display: none; flex-direction: column; height: 100vh; background: var(--bg);
       border-radius: 16px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
     body.expanded .panel { display: flex; }
@@ -30,7 +49,7 @@
     .p-sub { font-size: 11px; color: var(--txt-faint); }
     .p-collapse { margin-left: auto; background: var(--bg-3); color: var(--txt-dim); border: 1px solid var(--line);
       width: 26px; height: 26px; border-radius: 7px; cursor: pointer; font-size: 14px; }
-    .log { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; scrollbar-width: none; }
+    .log { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; scrollbar-width: none; -webkit-user-select: text; user-select: text; }
     .log::-webkit-scrollbar { width: 0; }
     .mb { font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
     .mb.you { align-self: flex-end; background: var(--accent); color: #fff; padding: 7px 11px; border-radius: 12px 12px 4px 12px; max-width: 85%; }
@@ -48,15 +67,22 @@
   </style>
 </head>
 <body class="collapsed">
-  <div class="orb">
-    <button class="orb-btn" id="orb" title="Open companion"></button>
-    <div class="badge" id="badge">1</div>
+  <div class="orb" id="orb"><div class="badge" id="badge">1</div></div>
+
+  <div class="suggest" id="suggest">
+    <div class="sug-title">Recommended now</div>
+    <div id="chips"></div>
+  </div>
+
+  <div class="ctx" id="ctx">
+    <div data-act="board">Open full board</div>
+    <div data-act="hide">Hide avatar</div>
   </div>
 
   <div class="panel">
     <div class="p-head">
       <img class="p-av" src="/web/companion.png" alt="" />
-      <div><div class="p-name">Advisory Board</div><div class="p-sub" id="sub">your companion</div></div>
+      <div><div class="p-name">Advisory Board</div><div class="p-sub">your companion</div></div>
       <button class="p-collapse" id="collapse" title="Minimize">–</button>
     </div>
     <div class="log" id="log"></div>

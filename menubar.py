@@ -47,9 +47,13 @@ class MiniBridge(NSObject):
     def userContentController_didReceiveScriptMessage_(self, ucc, message):
         try:
             body = message.body()
-            action = body.objectForKey_("action") if hasattr(body, "objectForKey_") else None
-            if action:
-                self._app._mini_action(str(action))
+            action = str(body.objectForKey_("action"))
+            if action == "move":
+                dx = float(body.objectForKey_("dx") or 0)
+                dy = float(body.objectForKey_("dy") or 0)
+                self._app._mini_move(dx, dy)
+            else:
+                self._app._mini_action(action)
         except Exception:
             pass
 
@@ -210,13 +214,13 @@ class BoardApp(rumps.App):
         from WebKit import WKWebView, WKWebViewConfiguration, WKUserContentController
         from Foundation import NSURL, NSURLRequest, NSMakeRect
         if self._mini is None:
-            rect = NSMakeRect(0, 0, 76, 76)   # starts as the avatar orb
+            rect = NSMakeRect(0, 0, 92, 92)   # starts as the avatar orb
             win = KeyableWindow.alloc().initWithContentRect_styleMask_backing_defer_(
                 rect, NSWindowStyleMaskBorderless, NSBackingStoreBuffered, False)
             win.setLevel_(NSFloatingWindowLevel)                 # always on top
             win.setOpaque_(False); win.setBackgroundColor_(NSColor.clearColor())
             win.setHasShadow_(True)
-            win.setMovableByWindowBackground_(True)              # drag the orb anywhere
+            win.setMovableByWindowBackground_(False)             # JS handles dragging
             win.setReleasedWhenClosed_(False)
             win.setCollectionBehavior_(NSWindowCollectionBehaviorCanJoinAllSpaces)
             conf = WKWebViewConfiguration.alloc().init()
@@ -231,23 +235,37 @@ class BoardApp(rumps.App):
             wv.loadRequest_(NSURLRequest.requestWithURL_(NSURL.URLWithString_(BASE + "/mini")))
             sf = win.screen().visibleFrame() if win.screen() else None
             if sf:
-                win.setFrameOrigin_((sf.origin.x + sf.size.width - 100, sf.origin.y + sf.size.height - 100))
+                win.setFrameOrigin_((sf.origin.x + sf.size.width - 120, sf.origin.y + sf.size.height - 120))
             self._mini = win; self._mini_wv = wv
         self._mini.orderFront_(None)
         NSApp.activateIgnoringOtherApps_(True)
 
+    _SIZES = {"collapse": (92, 92), "orb": (92, 92), "hover": (320, 210),
+              "menu": (200, 110), "expand": (346, 478)}
+
     def _mini_action(self, action):
         if not self._mini:
             return
+        if action == "board":
+            self.show_window(); return
+        if action == "hide":
+            self._mini_resize("orb"); self._mini.orderOut_(None); return
+        if action in self._SIZES:
+            self._mini_resize(action)
+            if action == "expand":
+                self._mini.makeKeyAndOrderFront_(None)
+
+    def _mini_resize(self, action):
         from Foundation import NSMakeRect
         f = self._mini.frame()
         right = f.origin.x + f.size.width
         top = f.origin.y + f.size.height
-        w, h = (346, 478) if action == "expand" else (76, 76)
+        w, h = self._SIZES.get(action, (92, 92))
         self._mini.setFrame_display_animate_(NSMakeRect(right - w, top - h, w, h), True, True)
-        self._mini.setMovableByWindowBackground_(action != "expand")
-        if action == "expand":
-            self._mini.makeKeyAndOrderFront_(None)
+
+    def _mini_move(self, dx, dy):
+        f = self._mini.frame()
+        self._mini.setFrameOrigin_((f.origin.x + dx, f.origin.y - dy))
 
     @rumps.clicked("Today")
     def _today(self, _):

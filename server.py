@@ -167,6 +167,39 @@ def api_activity():
     return _activity()
 
 
+_SUG = {"ts": 0.0, "items": []}
+
+
+@app.get("/api/suggestions")
+def api_suggestions():
+    import time
+    import re
+    import json as _json
+    from datetime import datetime, timedelta
+    import llm
+    if _SUG["items"] and time.time() - _SUG["ts"] < 1800:
+        return {"suggestions": _SUG["items"]}
+    pm = A.resolve("pm")
+    docs = C.agent_context()
+    recent = C.recent_activity((datetime.now() - timedelta(days=3)).date())
+    prompt = (
+        "Based on my calendar today and my recent project progress, suggest 3 short, "
+        "actionable things I could ask you or do right now to make today count. Each <=7 "
+        "words, imperative, specific to my actual context (name the project/meeting). "
+        "Respond ONLY as a JSON array of 3 strings.\n\nRECENT:\n" + recent
+    )
+    raw = llm.complete(pm.system(docs), [{"role": "user", "content": prompt}], max_tokens=200, temperature=0.5)
+    items, m = [], re.search(r"\[.*\]", raw, re.S)
+    if m:
+        try:
+            items = [str(x).strip() for x in _json.loads(m.group(0)) if str(x).strip()][:3]
+        except Exception:
+            pass
+    if items:
+        _SUG.update(ts=time.time(), items=items)
+    return {"suggestions": items}
+
+
 @app.get("/api/morning-brief")
 def api_morning_brief():
     today = datetime.now().strftime("%Y-%m-%d")
