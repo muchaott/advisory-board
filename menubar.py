@@ -33,6 +33,7 @@ class KeyableWindow(NSWindow):
     """Borderless window that can still become key (so the chat input accepts typing)."""
     def canBecomeKeyWindow(self): return True
     def canBecomeMainWindow(self): return True
+    def animationResizeTime_(self, newFrame): return 0.16  # smooth, quick resize
 
 
 class MiniBridge(NSObject):
@@ -262,7 +263,7 @@ class BoardApp(rumps.App):
         right = f.origin.x + f.size.width
         top = f.origin.y + f.size.height
         w, h = self._SIZES.get(action, (76, 76))
-        self._mini.setFrame_display_animate_(NSMakeRect(right - w, top - h, w, h), True, False)
+        self._mini.setFrame_display_animate_(NSMakeRect(right - w, top - h, w, h), True, True)
 
     def _mini_move(self, dx, dy):
         f = self._mini.frame()

@@ -20,10 +20,11 @@
     body.collapsed .badge.show { display: flex; }
 
     /* hover suggestions — appear to the LEFT of the orb, orb stays put */
-    .suggest { position: fixed; top: 6px; left: 8px; right: 78px; bottom: 8px; display: none; flex-direction: column; gap: 7px;
-      overflow-y: auto; scrollbar-width: none; }
+    .suggest { position: fixed; top: 6px; left: 8px; right: 78px; bottom: 8px; display: flex; flex-direction: column; gap: 7px;
+      overflow-y: auto; scrollbar-width: none; opacity: 0; transform: translateX(8px); pointer-events: none;
+      transition: opacity .16s ease, transform .16s ease; }
     .suggest::-webkit-scrollbar { width: 0; }
-    body.collapsed.hover .suggest { display: flex; }
+    body.collapsed.hover .suggest { opacity: 1; transform: none; pointer-events: auto; }
     .sug-title { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--txt-faint); padding-left: 2px; flex: none; }
     #chips { display: flex; flex-direction: column; gap: 8px; }
     .chip { background: rgba(20,24,43,.97); border: 1px solid var(--line); color: var(--txt); border-radius: 10px;
@@ -33,9 +34,10 @@
     .chip.muted { color: var(--txt-faint); cursor: default; box-shadow: none; }
 
     /* right-click menu — below the orb */
-    .ctx { position: fixed; top: 76px; right: 6px; display: none; background: var(--bg-2);
-      border: 1px solid var(--line); border-radius: 9px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
-    body.collapsed.menu .ctx { display: block; }
+    .ctx { position: fixed; top: 76px; right: 6px; background: var(--bg-2);
+      border: 1px solid var(--line); border-radius: 9px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,.5);
+      opacity: 0; transform: translateY(-6px); pointer-events: none; transition: opacity .14s ease, transform .14s ease; }
+    body.collapsed.menu .ctx { opacity: 1; transform: none; pointer-events: auto; }
     .ctx div { padding: 8px 14px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
     .ctx div:hover { background: var(--bg-3); }
 
