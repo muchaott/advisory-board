@@ -3,49 +3,46 @@ const $ = (s) => document.querySelector(s);
 const body = document.body;
 const thread = []; const MAX = 10;
 let busy = false, unread = 0, dragging = false, moved = false, lastX = 0, lastY = 0;
+let hoverT = null, leaveT = null, loadedSug = false;
 
 function host(action, extra) { try { window.webkit.messageHandlers.host.postMessage(Object.assign({ action }, extra || {})); } catch { /* not native */ } }
-function setState(s) { body.className = s; }
+function state(s) { body.className = s; }
+function setUnread(n) { unread = Math.max(0, n); const b = $("#badge"); b.textContent = unread > 9 ? "9+" : String(unread); b.classList.toggle("show", unread > 0); }
 
-function setUnread(n) {
-  unread = Math.max(0, n);
-  const b = $("#badge");
-  b.textContent = unread > 9 ? "9+" : String(unread);
-  b.classList.toggle("show", unread > 0);
+function expand() { clearTimeout(hoverT); clearTimeout(leaveT); state("expanded"); host("expand"); setUnread(0); setTimeout(() => $("#input").focus(), 60); scroll(); }
+function collapse() { state("collapsed"); host("collapse"); }
+
+// ---- hover (debounced; orb never moves) ----
+function showHover() {
+  if (dragging || !body.classList.contains("collapsed") || body.classList.contains("menu")) return;
+  clearTimeout(leaveT);
+  if (body.classList.contains("hover")) return;
+  hoverT = setTimeout(() => { body.classList.add("hover"); host("hover"); if (!loadedSug) loadSuggestions(); }, 130);
 }
+function hideHover() {
+  clearTimeout(hoverT);
+  if (!body.classList.contains("hover")) return;
+  leaveT = setTimeout(() => { body.classList.remove("hover"); host("collapse"); }, 130);
+}
+$("#orb").addEventListener("mouseenter", showHover);
+document.addEventListener("mouseenter", () => clearTimeout(leaveT), true);
+document.addEventListener("mouseleave", hideHover);
 
-function expand() { setState("expanded"); host("expand"); setUnread(0); setTimeout(() => $("#input").focus(), 60); scroll(); }
-function collapse() { setState("collapsed"); host("collapse"); }
-function hoverIn() { if (body.classList.contains("collapsed") && !dragging && !body.classList.contains("menu")) { body.classList.add("hover"); host("hover"); } }
-function hoverOut() { if (body.classList.contains("collapsed")) { body.classList.remove("hover"); if (!body.classList.contains("menu")) host("collapse"); } }
-function openMenu(x, y) { setState("collapsed menu"); host("menu"); const c = $("#ctx"); c.style.left = "10px"; c.style.top = "10px"; }
-function closeMenu() { body.classList.remove("menu"); host("collapse"); }
-
-// ---- drag (anywhere on desktop) ----
-$("#orb").addEventListener("mousedown", (e) => {
-  if (e.button !== 0) return;
-  dragging = true; moved = false; lastX = e.screenX; lastY = e.screenY; e.preventDefault();
-});
+// ---- drag anywhere ----
+$("#orb").addEventListener("mousedown", (e) => { if (e.button !== 0) return; dragging = true; moved = false; lastX = e.screenX; lastY = e.screenY; clearTimeout(hoverT); e.preventDefault(); });
 document.addEventListener("mousemove", (e) => {
   if (!dragging) return;
   const dx = e.screenX - lastX, dy = e.screenY - lastY;
   if (dx || dy) { if (Math.abs(dx) + Math.abs(dy) > 2) moved = true; lastX = e.screenX; lastY = e.screenY; host("move", { dx, dy }); }
 });
-document.addEventListener("mouseup", (e) => {
-  if (!dragging) return; dragging = false;
-  if (!moved && e.button === 0 && !body.classList.contains("menu")) expand();   // a click opens
-});
-
-// ---- hover suggestions ----
-$("#orb").addEventListener("mouseenter", hoverIn);
-document.addEventListener("mouseleave", () => { if (!dragging) hoverOut(); });
+document.addEventListener("mouseup", (e) => { if (!dragging) return; dragging = false; if (!moved && e.button === 0 && !body.classList.contains("menu")) expand(); });
 
 // ---- right-click menu ----
-$("#orb").addEventListener("contextmenu", (e) => { e.preventDefault(); openMenu(e.clientX, e.clientY); });
+$("#orb").addEventListener("contextmenu", (e) => { e.preventDefault(); clearTimeout(hoverT); body.classList.remove("hover"); state("collapsed menu"); host("menu"); });
 $("#ctx").addEventListener("click", (e) => {
   const act = e.target.dataset.act; if (!act) return;
   if (act === "hide") { host("hide"); body.classList.remove("menu"); }
-  else if (act === "board") { host("board"); closeMenu(); }
+  else if (act === "board") { host("board"); body.classList.remove("menu"); host("collapse"); }
 });
 
 // ---- chat ----
@@ -78,32 +75,22 @@ async function ask(q) {
 }
 
 $("#collapse").addEventListener("click", collapse);
-$("#composer").addEventListener("submit", (e) => {
-  e.preventDefault(); const t = $("#input"); const v = t.value.trim(); if (!v || busy) return;
-  t.value = ""; grow(t); ask(v);
-});
+$("#composer").addEventListener("submit", (e) => { e.preventDefault(); const t = $("#input"); const v = t.value.trim(); if (!v || busy) return; t.value = ""; grow(t); ask(v); });
 $("#input").addEventListener("input", (e) => grow(e.target));
 $("#input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#composer").requestSubmit(); } });
 
-// ---- suggestions + morning brief ----
+// ---- suggestions + brief ----
 async function loadSuggestions() {
   try {
     const s = (await (await fetch("/api/suggestions")).json()).suggestions || [];
     const c = $("#chips"); c.innerHTML = "";
     if (!s.length) { const d = document.createElement("div"); d.className = "chip muted"; d.textContent = "Thinking about your day…"; c.append(d); return; }
-    s.forEach((txt) => {
-      const d = document.createElement("div"); d.className = "chip"; d.textContent = txt;
-      d.addEventListener("click", () => { expand(); ask(txt); });
-      c.append(d);
-    });
+    loadedSug = true;
+    s.forEach((txt) => { const d = document.createElement("div"); d.className = "chip"; d.textContent = txt; d.addEventListener("click", () => { expand(); ask(txt); }); c.append(d); });
   } catch { /* ignore */ }
 }
 async function loadBrief() {
-  try {
-    const b = await (await fetch("/api/morning-brief")).json();
-    if (b && b.text) { add("bot", b.text); if (body.classList.contains("collapsed")) setUnread(unread + 1); return true; }
-  } catch { /* ignore */ }
-  return false;
+  try { const b = await (await fetch("/api/morning-brief")).json(); if (b && b.text) { add("bot", b.text); if (body.classList.contains("collapsed")) setUnread(unread + 1); } } catch { /* ignore */ }
 }
 window.__newBrief = () => { loadBrief(); };
 

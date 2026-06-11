@@ -215,12 +215,12 @@ class BoardApp(rumps.App):
         from WebKit import WKWebView, WKWebViewConfiguration, WKUserContentController
         from Foundation import NSURL, NSURLRequest, NSMakeRect
         if self._mini is None:
-            rect = NSMakeRect(0, 0, 92, 92)   # starts as the avatar orb
+            rect = NSMakeRect(0, 0, 76, 76)   # starts as the avatar orb
             win = KeyableWindow.alloc().initWithContentRect_styleMask_backing_defer_(
                 rect, NSWindowStyleMaskBorderless, NSBackingStoreBuffered, False)
             win.setLevel_(NSFloatingWindowLevel)                 # always on top
             win.setOpaque_(False); win.setBackgroundColor_(NSColor.clearColor())
-            win.setHasShadow_(True)
+            win.setHasShadow_(False)                             # no rectangular window shadow
             win.setMovableByWindowBackground_(False)             # JS handles dragging
             win.setReleasedWhenClosed_(False)
             win.setCollectionBehavior_(NSWindowCollectionBehaviorCanJoinAllSpaces)
@@ -241,8 +241,8 @@ class BoardApp(rumps.App):
         self._mini.orderFront_(None)
         NSApp.activateIgnoringOtherApps_(True)
 
-    _SIZES = {"collapse": (92, 92), "orb": (92, 92), "hover": (320, 210),
-              "menu": (200, 110), "expand": (346, 478)}
+    _SIZES = {"collapse": (76, 76), "orb": (76, 76), "hover": (300, 150),
+              "menu": (180, 170), "expand": (346, 478)}
 
     def _mini_action(self, action):
         if not self._mini:
@@ -261,8 +261,8 @@ class BoardApp(rumps.App):
         f = self._mini.frame()
         right = f.origin.x + f.size.width
         top = f.origin.y + f.size.height
-        w, h = self._SIZES.get(action, (92, 92))
-        self._mini.setFrame_display_animate_(NSMakeRect(right - w, top - h, w, h), True, True)
+        w, h = self._SIZES.get(action, (76, 76))
+        self._mini.setFrame_display_animate_(NSMakeRect(right - w, top - h, w, h), True, False)
 
     def _mini_move(self, dx, dy):
         f = self._mini.frame()
