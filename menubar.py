@@ -113,9 +113,8 @@ class BoardApp(rumps.App):
         self._sug = None
         self._sug_wv = None
         self._bridge = None
-        self._orb_hover = False
-        self._sug_hover = False
         self._sug_visible = False
+        self._leave_ticks = 0
         self._mainq = []
         self.menu = ["Mini Companion", "Open Full Board", "Today", None, "Quick Brag", "Quick Ask", None, "Quit"]
 
@@ -123,7 +122,8 @@ class BoardApp(rumps.App):
         threading.Thread(target=gui._serve, args=(PORT,), daemon=True).start()
         threading.Thread(target=self._boot, daemon=True).start()
         rumps.Timer(self._drain, 0.25).start()
-        rumps.Timer(self._tick, 45).start()   # checks for the 9am morning brief
+        rumps.Timer(self._tick, 45).start()          # checks for the 9am morning brief
+        rumps.Timer(self._hover_poll, 0.12).start()  # robust hover tracking for the orb+suggestions
         self._start_hotkeys()
 
     def _tick(self, _):
@@ -301,19 +301,29 @@ class BoardApp(rumps.App):
 
     # ---- hover → separate suggestions window (avatar window never changes) ----
     def _hover(self, who, on):
-        if who == "orb":
-            self._orb_hover = on
-        else:
-            self._sug_hover = on
-        if on:
-            if not self._sug_visible:
-                self._show_sug()
-        else:
-            threading.Timer(0.16, lambda: self._on_main(self._hover_check)).start()
+        # Showing is triggered by the orb reporting hover-in; hiding is handled by
+        # _hover_poll (polling the real cursor against both windows is far more
+        # reliable than DOM enter/leave events crossing two separate windows).
+        if who == "orb" and on and not self._sug_visible:
+            self._show_sug()
 
-    def _hover_check(self):
-        if not self._orb_hover and not self._sug_hover and self._sug_visible:
-            self._hide_sug()
+    def _hover_poll(self, _):
+        if not self._sug_visible or not self._mini or not self._sug:
+            return
+        from AppKit import NSEvent
+        p = NSEvent.mouseLocation()
+
+        def over(win, pad=14):
+            f = win.frame()
+            return (f.origin.x - pad <= p.x <= f.origin.x + f.size.width + pad and
+                    f.origin.y - pad <= p.y <= f.origin.y + f.size.height + pad)
+
+        if over(self._mini) or over(self._sug):
+            self._leave_ticks = 0
+        else:
+            self._leave_ticks += 1
+            if self._leave_ticks >= 2:   # ~0.24s outside both → dismiss
+                self._hide_sug()
 
     def _position_sug(self):
         of = self._mini.frame()
@@ -323,6 +333,7 @@ class BoardApp(rumps.App):
         if self._sug is None:
             return
         self._sug_visible = True
+        self._leave_ticks = 0
         self._position_sug()
         self._sug.orderFront_(None)
         if self._sug_wv:
@@ -335,14 +346,12 @@ class BoardApp(rumps.App):
         threading.Timer(0.34, lambda: self._on_main(lambda: self._sug and self._sug.orderOut_(None))).start()
 
     def _ask_from_sug(self, text):
-        self._orb_hover = self._sug_hover = False
         self._hide_sug()
         self._mini_resize("expand"); self._mini.makeKeyAndOrderFront_(None)
         if self._mini_wv and text:
             self._mini_wv.evaluateJavaScript_completionHandler_("window.__ask(" + json.dumps(text) + ")", None)
 
     def _hide_mini(self):
-        self._orb_hover = self._sug_hover = False
         if self._sug:
             self._sug_visible = False; self._sug.orderOut_(None)
         if self._mini:
