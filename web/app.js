@@ -44,6 +44,12 @@ function flushConvos() {
 async function init() {
   state.agents = await (await fetch("/api/agents")).json();
   state.agents.forEach((a) => (state.byName[a.name] = a.key));
+  try {
+    const order = await (await fetch("/api/agent-order")).json();
+    if (Array.isArray(order) && order.length) {
+      state.agents.sort((a, b) => (order.indexOf(a.key) + 1 || 99) - (order.indexOf(b.key) + 1 || 99));
+    }
+  } catch { /* default order */ }
   try { state.convos = (await (await fetch("/api/conversations")).json()) || {}; } catch { state.convos = {}; }
   renderAgents();
   loadActivity();
@@ -83,9 +89,33 @@ function renderAgents() {
     meta.append(badges);
     card.append(av, meta);
     card.onclick = () => onAgentClick(a.key);
+    makeDraggable(card);
     wrap.append(card);
   });
   paintSelection();
+}
+
+// ---------- drag-to-reorder ----------
+let draggingEl = null;
+function makeDraggable(card) {
+  card.draggable = true;
+  card.addEventListener("dragstart", (e) => { draggingEl = card; card.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; });
+  card.addEventListener("dragend", () => { card.classList.remove("dragging"); draggingEl = null; persistOrder(); });
+}
+function dragAfter(container, y) {
+  const els = [...container.querySelectorAll(".agent:not(.board-row):not(.dragging)")];
+  let best = { offset: -Infinity, el: null };
+  for (const child of els) {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > best.offset) best = { offset, el: child };
+  }
+  return best.el;
+}
+function persistOrder() {
+  const keys = [...$("#agents").querySelectorAll(".agent:not(.board-row)")].map((c) => c.dataset.key);
+  state.agents.sort((a, b) => keys.indexOf(a.key) - keys.indexOf(b.key));
+  fetch("/api/agent-order", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(keys) }).catch(() => {});
 }
 
 function onAgentClick(key) {
@@ -496,6 +526,15 @@ function toast(msg, err) { const t = el("div", "toast" + (err ? " err" : ""), ms
 function autoGrow(t) { t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; }
 function bindUI() {
   $("#composer").addEventListener("submit", onSubmit);
+
+  // reorder agents by dragging
+  $("#agents").addEventListener("dragover", (e) => {
+    if (!draggingEl) return;
+    e.preventDefault();
+    const after = dragAfter($("#agents"), e.clientY);
+    if (after == null) $("#agents").appendChild(draggingEl);
+    else $("#agents").insertBefore(draggingEl, after);
+  });
   const input = $("#input");
   input.addEventListener("input", () => autoGrow(input));
   input.addEventListener("keydown", (e) => {

@@ -75,6 +75,7 @@ body {
 }
 .agent:hover { border-color: var(--txt-faint); }
 .agent.selected { border-color: var(--ac); box-shadow: inset 0 0 0 1px var(--ac); }
+.agent.dragging { opacity: .4; }
 .agent.speaking { border-color: var(--ac); animation: pulse 1.1s infinite; }
 @keyframes pulse { 0%,100%{ box-shadow: 0 0 0 0 rgba(124,140,248,0);} 50%{ box-shadow: 0 0 0 3px rgba(124,140,248,.18);} }
 .av { width: 26px; height: 26px; border-radius: 50%; flex: none; background: var(--ac); box-shadow: inset 0 0 0 1px rgba(255,255,255,.12); }

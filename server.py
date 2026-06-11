@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parent
 WEB = ROOT / "web"
 STATE_DIR = ROOT / "data"
 CONV_PATH = STATE_DIR / "conversations.json"
+ORDER_PATH = STATE_DIR / "agent-order.json"
 
 app = FastAPI(title="Advisory Board")
 
@@ -183,6 +184,24 @@ async def save_conversations(req: Request):
     tmp = CONV_PATH.with_suffix(".tmp")
     tmp.write_text(json.dumps(body), encoding="utf-8")
     tmp.replace(CONV_PATH)  # atomic
+    return {"ok": True}
+
+
+@app.get("/api/agent-order")
+def get_agent_order():
+    if ORDER_PATH.exists():
+        try:
+            return json.loads(ORDER_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+    return []
+
+
+@app.post("/api/agent-order")
+async def save_agent_order(req: Request):
+    body = await req.json()
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    ORDER_PATH.write_text(json.dumps(body), encoding="utf-8")
     return {"ok": True}
 
 
