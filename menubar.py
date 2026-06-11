@@ -27,7 +27,7 @@ import gui  # reuse _free_port / _serve / _wait
 
 PORT = gui._free_port()
 BASE = f"http://127.0.0.1:{PORT}"
-ICON = os.path.join(ROOT, "assets", "roundtable.png")
+ICON = os.path.join(ROOT, "assets", "logo.png")
 
 _BOARD = None  # set to the running app instance
 

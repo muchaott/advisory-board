@@ -35,7 +35,7 @@ missing or rejected, so you usually only set it once.
 Same backend, three ways in:
 
 - **Menubar app** (default) — **Advisory Board.app** in `~/Applications` lives in
-  your menubar (roundtable icon) and owns the local server. Menu: **Open Board ·
+  your menubar (spark icon) and owns the local server. Menu: **Open Board ·
   Today · Quick Brag · Quick Ask · Quit**. Opens the window on launch.
   - **Quick Brag / Quick Ask** — a tiny input from the menubar (or global hotkey),
     so you capture a win or ask a question in seconds without hunting for a window.
@@ -70,7 +70,7 @@ jobs are untouched.
 
 Rebuild the GUI app bundle anytime: `osascript`-free, it's a plain bundle whose
 `Contents/MacOS/AdvisoryBoard` runs `./.venv/bin/python gui.py` with
-`assets/roundtable.icns` as the icon.
+`assets/logo.icns` as the icon.
 
 
 Then talk to the board:
