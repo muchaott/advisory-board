@@ -150,11 +150,13 @@ body {
 .center.drag-over .drop-hint { display: block; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: var(--accent); font-weight: 600; z-index: 6; pointer-events: none; }
 
 /* composer */
-.composer { display: flex; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); background: rgba(20,24,43,.6); }
+.composer { display: flex; align-items: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); background: rgba(20,24,43,.6); }
 #input { flex: 1; resize: none; background: var(--bg-3); color: var(--txt); border: 1px solid var(--line);
   border-radius: 11px; padding: 11px 13px; font: inherit; max-height: 160px; }
 #input:focus { outline: none; border-color: var(--accent); }
-.send { background: var(--accent); color: #fff; border: 0; border-radius: 11px; width: 46px; cursor: pointer; font-size: 16px; }
+.send { flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+  background: var(--accent); color: #fff; border: 0; border-radius: 11px; cursor: pointer; font-size: 15px; line-height: 1; padding: 0; }
+.send:hover { filter: brightness(1.08); }
 .send:disabled { opacity: .5; cursor: default; }
 
 /* activity */
