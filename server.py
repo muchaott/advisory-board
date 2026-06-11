@@ -41,6 +41,11 @@ def mini():
     return FileResponse(WEB / "mini.html")
 
 
+@app.get("/suggest")
+def suggest():
+    return FileResponse(WEB / "suggest.html")
+
+
 @app.get("/api/agents")
 def api_agents():
     return [

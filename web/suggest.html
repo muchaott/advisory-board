@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Suggestions</title>
+  <style>
+    html, body { background: transparent !important; margin: 0; height: 100%; overflow: hidden;
+      -webkit-user-select: none; user-select: none;
+      font: 13px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; }
+    .wrap { padding: 8px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+    .title { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: #99a2c4; padding-right: 4px;
+      opacity: 0; transition: opacity .15s ease; }
+    body.show .title { opacity: 1; }
+    #chips { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; width: 100%; }
+    .chip { background: rgba(20,24,43,.97); border: 1px solid #2e3759; color: #e7ebf5; border-radius: 10px;
+      padding: 9px 11px; font-size: 12px; line-height: 1.35; cursor: pointer; box-shadow: 0 3px 12px rgba(0,0,0,.5);
+      text-align: left; max-width: 100%;
+      opacity: 0; transform: translateX(14px) scale(.96); transition: opacity .2s ease, transform .2s ease; }
+    .chip.in { opacity: 1; transform: none; }
+    .chip:hover { border-color: #7c8cf8; background: #232a45; }
+    .chip:active { transform: scale(.98); }
+    .chip.muted { color: #6b739a; cursor: default; box-shadow: none; opacity: 1; transform: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="title">Recommended now</div>
+    <div id="chips"></div>
+  </div>
+  <script src="/web/suggest.js"></script>
+</body>
+</html>
