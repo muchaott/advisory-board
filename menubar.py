@@ -120,7 +120,8 @@ class BoardApp(rumps.App):
             morning.write_brief()
             self._on_main(self._show_morning)
         except Exception as e:
-            self._on_main(lambda: rumps.notification("Morning brief failed", "", str(e)[:90]))
+            msg = str(e)[:90]
+            self._on_main(lambda: rumps.notification("Morning brief failed", "", msg))
 
     def _show_morning(self):
         rumps.notification("☀ Good morning", "Your morning brief is ready", "Tap the companion to read it")
@@ -304,7 +305,8 @@ class BoardApp(rumps.App):
             self._on_main(lambda: (rumps.notification("The board says", "", ans[:200]),
                                    rumps.alert("Advisory Board", ans[:1800])))
         except Exception as e:
-            self._on_main(lambda: rumps.notification("Ask failed", "", str(e)[:90]))
+            msg = str(e)[:90]
+            self._on_main(lambda: rumps.notification("Ask failed", "", msg))
 
     @rumps.clicked("Quit")
     def _quit(self, _):
