@@ -12,7 +12,8 @@ function setUnread(n) { unread = Math.max(0, n); const b = $("#badge"); b.textCo
 function expand() { clearTimeout(hoverT); clearTimeout(leaveT); state("expanded"); host("expand"); setUnread(0); setTimeout(() => $("#input").focus(), 60); scroll(); }
 function collapse() { state("collapsed"); host("collapse"); }
 
-// ---- hover (debounced; orb never moves) ----
+// ---- hover (debounced; closes when cursor leaves the avatar + suggestions zone) ----
+function inZone(t) { return !!(t && t.closest && t.closest("#orb, #suggest")); }
 function showHover() {
   if (dragging || !body.classList.contains("collapsed") || body.classList.contains("menu")) return;
   clearTimeout(leaveT);
@@ -22,10 +23,15 @@ function showHover() {
 function hideHover() {
   clearTimeout(hoverT);
   if (!body.classList.contains("hover")) return;
+  clearTimeout(leaveT);
   leaveT = setTimeout(() => { body.classList.remove("hover"); host("collapse"); }, 130);
 }
 $("#orb").addEventListener("mouseenter", showHover);
-document.addEventListener("mouseenter", () => clearTimeout(leaveT), true);
+document.addEventListener("mousemove", (e) => {
+  if (dragging || !body.classList.contains("collapsed") || body.classList.contains("menu")) return;
+  if (inZone(e.target)) { clearTimeout(leaveT); if (!body.classList.contains("hover")) showHover(); }
+  else if (body.classList.contains("hover")) hideHover();
+});
 document.addEventListener("mouseleave", hideHover);
 
 // ---- drag anywhere ----
