@@ -21,9 +21,37 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 os.chdir(ROOT)
 sys.path.insert(0, ROOT)
 
+import objc
 import rumps
 import rumps.rumps as _rr
+from AppKit import NSWindow
+from Foundation import NSObject
 import gui  # reuse _free_port / _serve / _wait
+
+
+class KeyableWindow(NSWindow):
+    """Borderless window that can still become key (so the chat input accepts typing)."""
+    def canBecomeKeyWindow(self): return True
+    def canBecomeMainWindow(self): return True
+
+
+class MiniBridge(NSObject):
+    """Receives postMessage({action}) from the mini web UI to expand/collapse."""
+    def initWithApp_(self, app):
+        self = objc.super(MiniBridge, self).init()
+        if self is None:
+            return None
+        self._app = app
+        return self
+
+    def userContentController_didReceiveScriptMessage_(self, ucc, message):
+        try:
+            body = message.body()
+            action = body.objectForKey_("action") if hasattr(body, "objectForKey_") else None
+            if action:
+                self._app._mini_action(str(action))
+        except Exception:
+            pass
 
 PORT = gui._free_port()
 BASE = f"http://127.0.0.1:{PORT}"
@@ -62,6 +90,8 @@ class BoardApp(rumps.App):
         self._window = None
         self._webview = None
         self._mini = None
+        self._mini_wv = None
+        self._bridge = None
         self._mainq = []
         self.menu = ["Mini Companion", "Open Full Board", "Today", None, "Quick Brag", "Quick Ask", None, "Quit"]
 
@@ -84,17 +114,16 @@ class BoardApp(rumps.App):
         try:
             import morning
             morning.write_brief()
-            self._on_main(lambda: (
-                rumps.notification("☀ Good morning", "Your morning brief is ready", "Opening the board…"),
-                self._show_morning()))
+            self._on_main(self._show_morning)
         except Exception as e:
             self._on_main(lambda: rumps.notification("Morning brief failed", "", str(e)[:90]))
 
     def _show_morning(self):
-        self.show_window()
+        rumps.notification("☀ Good morning", "Your morning brief is ready", "Tap the companion to read it")
+        self.show_mini()  # ensure the orb is up
         try:
-            from Foundation import NSURL, NSURLRequest
-            self._webview.loadRequest_(NSURLRequest.requestWithURL_(NSURL.URLWithString_(BASE + "/?morning=1")))
+            if self._mini_wv:
+                self._mini_wv.evaluateJavaScript_completionHandler_("window.__newBrief && window.__newBrief()", None)
         except Exception:
             pass
 
@@ -175,28 +204,50 @@ class BoardApp(rumps.App):
     def _mini_click(self, _): self.show_mini()
 
     def show_mini(self, _=None):
-        from AppKit import (NSWindow, NSBackingStoreBuffered, NSWindowStyleMaskTitled,
-                            NSWindowStyleMaskClosable, NSWindowStyleMaskResizable,
-                            NSFloatingWindowLevel, NSWindowCollectionBehaviorCanJoinAllSpaces, NSApp)
-        from WebKit import WKWebView, WKWebViewConfiguration
+        from AppKit import (NSBackingStoreBuffered, NSWindowStyleMaskBorderless,
+                            NSFloatingWindowLevel, NSWindowCollectionBehaviorCanJoinAllSpaces,
+                            NSApp, NSColor)
+        from WebKit import WKWebView, WKWebViewConfiguration, WKUserContentController
         from Foundation import NSURL, NSURLRequest, NSMakeRect
         if self._mini is None:
-            mask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable
-            rect = NSMakeRect(0, 0, 340, 470)
-            win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(rect, mask, NSBackingStoreBuffered, False)
-            win.setTitle_("Companion")
+            rect = NSMakeRect(0, 0, 76, 76)   # starts as the avatar orb
+            win = KeyableWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+                rect, NSWindowStyleMaskBorderless, NSBackingStoreBuffered, False)
+            win.setLevel_(NSFloatingWindowLevel)                 # always on top
+            win.setOpaque_(False); win.setBackgroundColor_(NSColor.clearColor())
+            win.setHasShadow_(True)
+            win.setMovableByWindowBackground_(True)              # drag the orb anywhere
             win.setReleasedWhenClosed_(False)
-            win.setLevel_(NSFloatingWindowLevel)                       # always on top
             win.setCollectionBehavior_(NSWindowCollectionBehaviorCanJoinAllSpaces)
-            wv = WKWebView.alloc().initWithFrame_configuration_(rect, WKWebViewConfiguration.alloc().init())
+            conf = WKWebViewConfiguration.alloc().init()
+            ucc = WKUserContentController.alloc().init()
+            self._bridge = MiniBridge.alloc().initWithApp_(self)
+            ucc.addScriptMessageHandler_name_(self._bridge, "host")
+            conf.setUserContentController_(ucc)
+            wv = WKWebView.alloc().initWithFrame_configuration_(rect, conf)
+            try: wv.setValue_forKey_(False, "drawsBackground")   # transparent webview
+            except Exception: pass
             win.setContentView_(wv)
             wv.loadRequest_(NSURLRequest.requestWithURL_(NSURL.URLWithString_(BASE + "/mini")))
             sf = win.screen().visibleFrame() if win.screen() else None
             if sf:
-                win.setFrameOrigin_((sf.origin.x + sf.size.width - 360, sf.origin.y + 40))
-            self._mini = win
-        self._mini.makeKeyAndOrderFront_(None)
+                win.setFrameOrigin_((sf.origin.x + sf.size.width - 100, sf.origin.y + sf.size.height - 100))
+            self._mini = win; self._mini_wv = wv
+        self._mini.orderFront_(None)
         NSApp.activateIgnoringOtherApps_(True)
+
+    def _mini_action(self, action):
+        if not self._mini:
+            return
+        from Foundation import NSMakeRect
+        f = self._mini.frame()
+        right = f.origin.x + f.size.width
+        top = f.origin.y + f.size.height
+        w, h = (346, 478) if action == "expand" else (76, 76)
+        self._mini.setFrame_display_animate_(NSMakeRect(right - w, top - h, w, h), True, True)
+        self._mini.setMovableByWindowBackground_(action != "expand")
+        if action == "expand":
+            self._mini.makeKeyAndOrderFront_(None)
 
     @rumps.clicked("Today")
     def _today(self, _):
