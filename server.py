@@ -36,6 +36,11 @@ def index():
     return FileResponse(WEB / "index.html")
 
 
+@app.get("/mini")
+def mini():
+    return FileResponse(WEB / "mini.html")
+
+
 @app.get("/api/agents")
 def api_agents():
     return [

@@ -61,8 +61,9 @@ class BoardApp(rumps.App):
         _BOARD = self
         self._window = None
         self._webview = None
+        self._mini = None
         self._mainq = []
-        self.menu = ["Open Board", "Today", None, "Quick Brag", "Quick Ask", None, "Quit"]
+        self.menu = ["Mini Companion", "Open Full Board", "Today", None, "Quick Brag", "Quick Ask", None, "Quit"]
 
         self._last_morning = None
         threading.Thread(target=gui._serve, args=(PORT,), daemon=True).start()
@@ -100,7 +101,7 @@ class BoardApp(rumps.App):
     def _boot(self):
         gui._wait(BASE + "/")
         self._on_main(self._install_edit_menu)
-        self._on_main(self.show_window)
+        self._on_main(self.show_mini)   # the floating companion is the default presence
 
     def _install_edit_menu(self):
         """A rumps app has no main menu, so ⌘C/⌘V/⌘A/⌘Z don't bind to anything.
@@ -167,8 +168,35 @@ class BoardApp(rumps.App):
         self._webview = wv
         return win
 
-    @rumps.clicked("Open Board")
+    @rumps.clicked("Open Full Board")
     def _open(self, _): self.show_window()
+
+    @rumps.clicked("Mini Companion")
+    def _mini_click(self, _): self.show_mini()
+
+    def show_mini(self, _=None):
+        from AppKit import (NSWindow, NSBackingStoreBuffered, NSWindowStyleMaskTitled,
+                            NSWindowStyleMaskClosable, NSWindowStyleMaskResizable,
+                            NSFloatingWindowLevel, NSWindowCollectionBehaviorCanJoinAllSpaces, NSApp)
+        from WebKit import WKWebView, WKWebViewConfiguration
+        from Foundation import NSURL, NSURLRequest, NSMakeRect
+        if self._mini is None:
+            mask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable
+            rect = NSMakeRect(0, 0, 340, 470)
+            win = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(rect, mask, NSBackingStoreBuffered, False)
+            win.setTitle_("Companion")
+            win.setReleasedWhenClosed_(False)
+            win.setLevel_(NSFloatingWindowLevel)                       # always on top
+            win.setCollectionBehavior_(NSWindowCollectionBehaviorCanJoinAllSpaces)
+            wv = WKWebView.alloc().initWithFrame_configuration_(rect, WKWebViewConfiguration.alloc().init())
+            win.setContentView_(wv)
+            wv.loadRequest_(NSURLRequest.requestWithURL_(NSURL.URLWithString_(BASE + "/mini")))
+            sf = win.screen().visibleFrame() if win.screen() else None
+            if sf:
+                win.setFrameOrigin_((sf.origin.x + sf.size.width - 360, sf.origin.y + 40))
+            self._mini = win
+        self._mini.makeKeyAndOrderFront_(None)
+        NSApp.activateIgnoringOtherApps_(True)
 
     @rumps.clicked("Today")
     def _today(self, _):
