@@ -34,8 +34,12 @@
     .mb.you { align-self: flex-end; background: var(--accent); color: var(--accent-ink); padding: 7px 11px; border-radius: 12px 12px 4px 12px; max-width: 85%; }
     .mb.bot { align-self: flex-start; color: var(--txt); border-left: 3px solid #9ccb6a; padding-left: 10px; max-width: 96%; }
     .mb-name { font-size: 10.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: #9ccb6a; margin-bottom: 3px; }
+    .mb-doc { display: inline-block; margin-top: 5px; background: var(--bg-3); color: var(--txt-dim); border: 1px solid var(--line);
+      border-radius: 6px; font-size: 10.5px; padding: 2px 7px; cursor: pointer; opacity: 0; transition: opacity .12s ease; }
+    .mb.bot:hover .mb-doc { opacity: 1; }
+    .mb-doc:hover { color: #9ccb6a; border-color: #9ccb6a; }
     .mb.note { align-self: center; font-size: 11px; color: var(--txt-faint); font-style: italic; padding: 1px 0; }
-    .mb.bot.streaming::after { content: "▌"; color: #9ccb6a; animation: blink 1s steps(2) infinite; }
+    .mb.bot.streaming::after { content: "▌"; color: var(--cur, #9ccb6a); animation: blink 1s steps(2) infinite; }
     @keyframes blink { 50% { opacity: 0; } }
     .composer { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--line); }
     .composer textarea { flex: 1; resize: none; background: var(--bg-3); color: var(--txt); border: 1px solid var(--line);

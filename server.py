@@ -54,10 +54,35 @@ def chat():
 @app.get("/api/agents")
 def api_agents():
     return [
-        {"key": a.key, "name": a.name, "goal": a.goal,
-         "reads_docs": a.reads_docs, "writes_brag": a.writes_brag, "deep": a.deep}
+        {"key": a.key, "name": a.name, "goal": a.goal, "color": a.color,
+         "reads_docs": a.reads_docs, "writes_brag": a.writes_brag, "deep": a.deep,
+         "builtin": a.builtin, "has_kb": bool(a.kb)}
         for a in A.roster()
     ]
+
+
+@app.get("/api/agents/{key}")
+def api_agent_get(key: str):
+    rec = A.record(key)
+    if not rec:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return rec
+
+
+@app.post("/api/agents")
+async def api_agent_upsert(req: Request):
+    body = await req.json()
+    if not (body.get("name") or "").strip() and not (body.get("key") or "").strip():
+        return JSONResponse({"error": "name is required"}, status_code=400)
+    agent = A.upsert(body)
+    return A.record(agent.key)
+
+
+@app.delete("/api/agents/{key}")
+def api_agent_delete(key: str):
+    if not A.delete(key):
+        return JSONResponse({"error": "built-in agents can't be deleted"}, status_code=400)
+    return {"ok": True}
 
 
 def _sse(gen):
@@ -187,16 +212,23 @@ def api_suggestions():
     import json as _json
     from datetime import datetime, timedelta
     import llm
-    if _SUG["items"] and time.time() - _SUG["ts"] < 1800:
+    if _SUG["items"] and time.time() - _SUG["ts"] < 600:  # ~10 min: fresh through the day, still cheap
         return {"suggestions": _SUG["items"]}
     pm = A.resolve("pm")
     docs = C.agent_context()
     recent = C.recent_activity((datetime.now() - timedelta(days=3)).date())
+    try:
+        today_cal = G.calendar_today()
+    except Exception:
+        today_cal = []
+    now = datetime.now().strftime("%A %-I:%M %p")
+    cal_txt = "\n".join("- " + c for c in today_cal) if today_cal else "(nothing scheduled today)"
     prompt = (
-        "Based on my calendar today and my recent project progress, suggest 3 short, "
-        "actionable things I could ask you or do right now to make today count. Each <=7 "
-        "words, imperative, specific to my actual context (name the project/meeting). "
-        "Respond ONLY as a JSON array of 3 strings.\n\nRECENT:\n" + recent
+        f"It's {now}. Looking at what's on my plate RIGHT NOW, suggest 3 short, actionable "
+        "things I could ask you or do next to make today count. Each <=7 words, imperative, "
+        "specific to my actual context (name the project/meeting/person). Favor time-sensitive "
+        "items — an upcoming meeting today, a current priority, or a fresh Slack thread. "
+        f"Respond ONLY as a JSON array of 3 strings.\n\nTODAY'S CALENDAR:\n{cal_txt}\n\nRECENT:\n{recent}"
     )
     try:
         raw = llm.complete(pm.system(docs), [{"role": "user", "content": prompt}], max_tokens=200, temperature=0.5)
@@ -227,6 +259,22 @@ def api_calendar():
     return {"today": G.calendar_today(), "upcoming": G.calendar_upcoming(7), "status": G.status()}
 
 
+@app.post("/api/savedoc")
+async def api_savedoc(req: Request):
+    """Save text (e.g. an agent's reply) to a new Google Doc; returns its URL."""
+    body = await req.json()
+    text = body.get("text") or ""
+    title = (body.get("title") or "").strip() or "Yoda note"
+    if not text.strip():
+        return JSONResponse({"error": "nothing to save"}, status_code=400)
+    url = G.create_doc(title, text)
+    if not url:
+        return JSONResponse(
+            {"error": "Couldn't create the doc — Google Docs auth is likely expired. "
+                      "Use the Docs MCP once (or re-auth) to refresh it."}, status_code=502)
+    return {"url": url}
+
+
 @app.get("/api/conversations")
 def get_conversations():
     if CONV_PATH.exists():
@@ -235,6 +283,28 @@ def get_conversations():
         except Exception:
             return {}
     return {}
+
+
+@app.post("/api/conversations/update")
+async def update_conversation(req: Request):
+    """Merge a single view's turns into the shared store (used by the mini chat)."""
+    body = await req.json()
+    vk = body.get("viewKey")
+    turns = body.get("turns")
+    if not vk or turns is None:
+        return JSONResponse({"error": "need viewKey and turns"}, status_code=400)
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    data = {}
+    if CONV_PATH.exists():
+        try:
+            data = json.loads(CONV_PATH.read_text(encoding="utf-8")) or {}
+        except Exception:
+            data = {}
+    data[vk] = turns
+    tmp = CONV_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data), encoding="utf-8")
+    tmp.replace(CONV_PATH)  # atomic
+    return {"ok": True}
 
 
 @app.post("/api/conversations")

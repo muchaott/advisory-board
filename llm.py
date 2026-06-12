@@ -5,6 +5,7 @@ and retrying once on an auth failure.
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -118,3 +119,63 @@ def stream(system: str, messages: list[dict], *, deep: bool = False,
                 continue
             raise
     raise RuntimeError("LLM stream failed after key refresh.")
+
+
+def stream_events(system: str, messages: list[dict], *, deep: bool = False,
+                  max_tokens: int = 1500, temperature: float = 0.7,
+                  tools: list | None = None, run_tool=None, max_rounds: int = 4):
+    """Stream a completion that may call tools.
+
+    Yields dicts: {"text": delta} for streamed text, and {"tool": {...}} when a
+    tool runs (status "running" then "done" with its result). Tool calls are
+    executed via `run_tool(name, input)` and fed back to the model until it
+    produces a final answer (capped at `max_rounds`).
+    """
+    model = DEEP_MODEL if deep else DEFAULT_MODEL
+    key = _ensure_key()
+    msgs = [dict(m) for m in messages]
+    tools = tools or []
+
+    for _round in range(max_rounds):
+        final = None
+        for attempt in range(2):
+            try:
+                with _client(key).messages.stream(
+                    model=model, system=system, messages=msgs,
+                    max_tokens=max_tokens, temperature=temperature, tools=tools,
+                ) as s:
+                    for delta in s.text_stream:
+                        yield {"text": delta}
+                    final = s.get_final_message()
+                break
+            except anthropic.AuthenticationError:
+                if attempt == 0:
+                    key = _refresh_key() or key
+                    continue
+                raise
+            except anthropic.APIStatusError as e:
+                if attempt == 0 and e.status_code in (401, 403):
+                    key = _refresh_key() or key
+                    continue
+                raise
+
+        if final is None or final.stop_reason != "tool_use" or not run_tool:
+            return
+
+        # Re-send the assistant turn (text + tool_use), then the tool results.
+        assistant = []
+        for b in final.content:
+            if b.type == "text":
+                assistant.append({"type": "text", "text": b.text})
+            elif b.type == "tool_use":
+                assistant.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
+        msgs.append({"role": "assistant", "content": assistant})
+
+        results = []
+        for b in final.content:
+            if getattr(b, "type", None) == "tool_use":
+                yield {"tool": {"name": b.name, "input": b.input, "status": "running"}}
+                res = run_tool(b.name, b.input)
+                yield {"tool": {"name": b.name, "result": res, "status": "done"}}
+                results.append({"type": "tool_result", "tool_use_id": b.id, "content": json.dumps(res)})
+        msgs.append({"role": "user", "content": results})

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Advisory Board -- local CLI.
 
-Talk to a board of 6 AI agents that help you grow as a designer and thought leader.
+Talk to a board of AI agents that help you become a better designer.
 
 Usage examples (type these at the prompt):
   @critic review this flow: a user taps a pending P2P payment and ...

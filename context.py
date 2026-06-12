@@ -107,9 +107,18 @@ def google_files_block() -> str:
         return ""
 
 
+def slack_block() -> str:
+    """Recent messages from the configured Slack channels; '' if unavailable."""
+    try:
+        import slack
+        return slack.recent_context()
+    except Exception:
+        return ""
+
+
 def agent_context() -> str:
-    """What read-access agents see: local docs + live calendar + key Google files."""
-    blocks = [load_docs(), google_block(), google_files_block()]
+    """What read-access agents see: local docs + calendar + key Google files + Slack."""
+    blocks = [load_docs(), google_block(), google_files_block(), slack_block()]
     return "\n\n".join(b for b in blocks if b)
 
 

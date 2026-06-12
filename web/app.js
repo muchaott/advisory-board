@@ -1,18 +1,18 @@
 "use strict";
 
 const COLORS = {
-  strategist: "#3fd0c9", pm: "#f0b65e", mentor: "#b794f6",
+  strategist: "#3fd0c9", pm: "#f0b65e", mentor: "#9ccb6a",
   ai: "#68d391", critic: "#fc8181", translator: "#63b3ed", calendar: "#8b95c9",
 };
 const INITIALS = {
   strategist: "STR", pm: "PM", mentor: "MEN", ai: "AI", critic: "CRI", translator: "TRA",
 };
-const color = (k) => COLORS[k] || "#7c8cf8";
+const color = (k) => (state.byColor && state.byColor[k]) || COLORS[k] || "#7c8cf8";
 const MAX_THREAD = 12;
 const DEFAULT_AGENT = "mentor";  // Career Mentor — the concierge that routes
 
 // convos: viewKey -> [turn]. turn = {t:'user'|'agent'|'divider', ...}
-const state = { mode: "single", selected: [], agents: [], byName: {}, busyViews: new Set(), pending: null, convos: {}, attach: null, quote: null };
+const state = { mode: "single", selected: [], agents: [], byName: {}, byColor: {}, busyViews: new Set(), pending: null, convos: {}, attach: null, quote: null };
 let pendingQuote = null;
 
 const $ = (s) => document.querySelector(s);
@@ -45,17 +45,22 @@ function flushConvos() {
 }
 
 // ---------- init ----------
-async function init() {
+async function loadAgents() {
   state.agents = await (await fetch("/api/agents")).json();
-  state.agents.forEach((a) => (state.byName[a.name] = a.key));
+  state.byName = {}; state.byColor = {};
+  state.agents.forEach((a) => { state.byName[a.name] = a.key; state.byColor[a.key] = a.color; });
   try {
     const order = await (await fetch("/api/agent-order")).json();
     if (Array.isArray(order) && order.length) {
       state.agents.sort((a, b) => (order.indexOf(a.key) + 1 || 99) - (order.indexOf(b.key) + 1 || 99));
     }
   } catch { /* default order */ }
-  try { state.convos = (await (await fetch("/api/conversations")).json()) || {}; } catch { state.convos = {}; }
   renderAgents();
+}
+
+async function init() {
+  await loadAgents();
+  try { state.convos = (await (await fetch("/api/conversations")).json()) || {}; } catch { state.convos = {}; }
   loadActivity();
   bindUI();
   // Career Mentor is the default agent for a new chat (it routes to specialists).
@@ -86,6 +91,22 @@ async function adoptHandoff() {
   finally { adopting = false; }
 }
 window.__adoptHandoff = adoptHandoff;
+
+// Pull the mini chat's synced conversation into the Career Mentor view (companion).
+window.__reloadConvos = async () => {
+  let all;
+  try { all = await (await fetch("/api/conversations")).json(); } catch { return; }
+  if (!all) return;
+  const vk = "single:" + DEFAULT_AGENT;
+  if (all[vk]) state.convos[vk] = all[vk];   // adopt companion thread; leave other views intact
+  renderConvo();
+};
+// Open a specific view (used when enlarging the mini chat).
+window.__openView = async (vk) => {
+  if (vk && vk.indexOf("single:") === 0) { state.mode = "single"; state.selected = [vk.slice(7)]; }
+  await window.__reloadConvos();
+  paintSelection(); renderConvo(); updateComposerEnabled(); focusComposer();
+};
 
 async function showMorningBrief() {
   try {
@@ -126,8 +147,11 @@ function renderAgents() {
     if (a.reads_docs) badges.append(el("span", "badge", "docs"));
     if (a.writes_brag) badges.append(el("span", "badge", "writes"));
     if (a.deep) badges.append(el("span", "badge", "deep"));
+    if (a.has_kb) badges.append(el("span", "badge", "kb"));
     meta.append(badges);
-    card.append(av, meta);
+    const edit = el("button", "agent-edit", "✎"); edit.title = "Edit agent";
+    edit.onclick = (e) => { e.stopPropagation(); openAgentEditor(a.key); };
+    card.append(av, meta, edit);
     card.onclick = () => onAgentClick(a.key);
     makeDraggable(card);
     wrap.append(card);
@@ -274,7 +298,10 @@ function buildAgentBubble(name, key, reacting, streaming) {
   const head = el("div", "bubble-head");
   const av = el("div", "av"); av.style.background = color(key);
   head.append(av, el("div", "bubble-name", name));
+  const doc = el("button", "bubble-doc", "⤓ Doc"); doc.title = "Save this reply to a Google Doc";
   const body = el("div", "bubble-body" + (streaming ? " streaming" : ""));
+  doc.onclick = () => saveToDoc(body.textContent, name);
+  head.append(doc);
   b.append(head, body); wrap.append(b); $("#conversation").append(wrap);
   return { wrap, body };
 }
@@ -351,6 +378,17 @@ async function ask(mode, keys, message, opts = {}) {
         else if (ev.type === "agent_start") { const was = nearBottom(); reacting = null; startedKeys.add(ev.key); const r = buildAgentBubble(ev.agent, ev.key, null, true); wrap = r.wrap; body = r.body; markSpeaking(ev.key, true); if (was) scrollDown(); }
         else if (ev.type === "reacting_to" && wrap) { reacting = ev.prior; addReacting(wrap, ev.prior); }
         else if (ev.type === "token" && body) { const was = nearBottom(); body.textContent += ev.text; if (body.isConnected && was) scrollDown(); }
+        else if (ev.type === "doc") {
+          const c = el("div", "doc-link"); const a = el("a", null, "📄 Open Google Doc"); a.href = ev.url;
+          a.onclick = (e) => { e.preventDefault(); host("openURL", { url: ev.url }); };
+          c.append(a); (wrap || $("#conversation")).append(c);
+          toast("Google Doc created ✓"); host("openURL", { url: ev.url }); if (nearBottom()) scrollDown();
+        }
+        else if (ev.type === "auth_needed") {
+          const c = el("div", "auth-note", "🔑 " + (ev.message || ("Needs " + (ev.service || "access")))); (wrap || $("#conversation")).append(c);
+          toast(ev.message || "Authorization needed", true); if (nearBottom()) scrollDown();
+        }
+        else if (ev.type === "tool" && ev.status === "running") { /* tool in progress; text follows */ }
         else if (ev.type === "agent_done") {
           body?.classList.remove("streaming"); markSpeaking(ev.key, false);
           if (body) arr.push({ t: "agent", key: ev.key, name: ev.agent, text: body.textContent, reacting });
@@ -572,6 +610,68 @@ async function loadActivity() {
 }
 function openModal(title, body) { $("#modalTitle").textContent = title; $("#modalBody").textContent = body; $("#modal").hidden = false; }
 
+// ---------- agent editor (add / edit / remove) ----------
+let editingKey = null;
+async function openAgentEditor(key) {
+  editingKey = key || null;
+  let rec = { name: "", goal: "", system_prompt: "", kb: "", color: "#7c8cf8", reads_docs: false, deep: false, builtin: false };
+  if (key) { try { rec = await (await fetch("/api/agents/" + encodeURIComponent(key))).json(); } catch { /* blank */ } }
+  $("#agentModalTitle").textContent = key ? "Edit · " + (rec.name || key) : "New agent";
+  $("#aeName").value = rec.name || ""; $("#aeGoal").value = rec.goal || "";
+  $("#aePrompt").value = rec.system_prompt || ""; $("#aeKb").value = rec.kb || "";
+  $("#aeColor").value = rec.color || "#7c8cf8";
+  $("#aeReads").checked = !!rec.reads_docs; $("#aeDeep").checked = !!rec.deep;
+  $("#aeDelete").hidden = !(key && rec.builtin === false);   // custom agents only
+  $("#agentModal").hidden = false;
+  setTimeout(() => $("#aeName").focus(), 30);
+}
+function closeAgentEditor() { $("#agentModal").hidden = true; editingKey = null; }
+
+async function saveAgent() {
+  const body = {
+    key: editingKey || undefined,
+    name: $("#aeName").value.trim(), goal: $("#aeGoal").value.trim(),
+    system_prompt: $("#aePrompt").value.trim(), kb: $("#aeKb").value,
+    color: $("#aeColor").value, reads_docs: $("#aeReads").checked, deep: $("#aeDeep").checked,
+  };
+  if (!body.name) { toast("Name is required.", true); return; }
+  try {
+    const r = await fetch("/api/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!r.ok) { toast((await r.json()).error || "save failed", true); return; }
+    await loadAgents(); paintSelection(); renderConvo(); closeAgentEditor(); toast("Agent saved ✓");
+  } catch (e) { toast("save failed: " + e.message, true); }
+}
+
+async function deleteAgent() {
+  if (!editingKey) return;
+  try {
+    const r = await fetch("/api/agents/" + encodeURIComponent(editingKey), { method: "DELETE" });
+    if (!r.ok) { toast((await r.json()).error || "delete failed", true); return; }
+    if (state.mode === "single" && state.selected[0] === editingKey) {
+      const def = state.agents.find((a) => a.key === DEFAULT_AGENT) || state.agents.find((a) => a.key !== editingKey);
+      state.selected = def ? [def.key] : [];
+    }
+    await loadAgents(); paintSelection(); renderConvo(); closeAgentEditor(); toast("Agent deleted");
+  } catch (e) { toast("delete failed: " + e.message, true); }
+}
+
+// ---------- save an agent reply to a Google Doc ----------
+function docTitle(text, name) {
+  const first = (text.split("\n").find((l) => l.trim()) || "").replace(/^#+\s*/, "").replace(/\*\*/g, "").trim();
+  return first ? first.slice(0, 80) : (name ? name.replace(/^The /, "") : "Yoda note");
+}
+async function saveToDoc(text, name) {
+  if (!text || !text.trim()) { toast("Nothing to save yet.", true); return; }
+  toast("Creating Google Doc…");
+  try {
+    const r = await fetch("/api/savedoc", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: docTitle(text, name), text }) });
+    const d = await r.json();
+    if (!r.ok || !d.url) { toast(d.error || "couldn't create the doc", true); return; }
+    toast("Saved to Google Doc ✓"); host("openURL", { url: d.url });
+  } catch (e) { toast("save failed: " + e.message, true); }
+}
+
 // ---------- toasts ----------
 function toast(msg, err) { const t = el("div", "toast" + (err ? " err" : ""), msg); $("#toasts").append(t); setTimeout(() => t.remove(), 4200); }
 
@@ -602,6 +702,14 @@ function bindUI() {
   }));
   $("#modalClose").onclick = () => ($("#modal").hidden = true);
   $("#modal").onclick = (e) => { if (e.target.id === "modal") $("#modal").hidden = true; };
+
+  // agent editor
+  $("#newAgent").onclick = () => openAgentEditor(null);
+  $("#agentModalClose").onclick = closeAgentEditor;
+  $("#aeCancel").onclick = closeAgentEditor;
+  $("#aeSave").onclick = saveAgent;
+  $("#aeDelete").onclick = deleteAgent;
+  $("#agentModal").onclick = (e) => { if (e.target.id === "agentModal") closeAgentEditor(); };
 
   // drag-and-drop + paste images
   const center = document.querySelector(".center");

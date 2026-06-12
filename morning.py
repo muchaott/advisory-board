@@ -2,8 +2,7 @@
 
 The Design PM asks a few sharp, *personalized* questions (drawn from recent
 activity + the 1:1 + current focus) to set up a high-leverage day toward becoming
-a stronger designer and thought leader,
-then synthesizes today's focus from your answers.
+a better designer, then synthesizes today's focus from your answers.
 
 - Interactive (a TTY): asks questions live, prints a game plan.
 - Headless (no TTY): returns the questions as a brief instead of blocking.
@@ -39,12 +38,12 @@ def questions(n: int = 4) -> list[str]:
     docs = C.agent_context()
     prompt = (
         f"It's {today.strftime('%A, %B %d')}. As my Design PM, ask me the {n} most important "
-        "questions RIGHT NOW to set up a high-leverage day toward becoming a stronger designer "
-        "and thought leader. Base them on "
+        "questions RIGHT NOW to set up a high-leverage day toward becoming a better designer. "
+        "Base them on "
         "my recent activity, my 1:1 with Nathan, and my current focus — make them specific to "
         "what's actually on my plate, not generic. Favor questions that force prioritization, "
         "surface the single most important outcome, flag what to decline, and tie today to my "
-        "growth as a designer and thought leader.\n\n"
+        "growth as a designer.\n\n"
         f"RECENT ACTIVITY (last few days):\n{recent}\n\n"
         f"WORKING DOCS + 1:1 (context):\n{docs}\n\n"
         f"Respond with ONLY a JSON array of exactly {n} question strings."
@@ -71,7 +70,7 @@ def plan(qa: list[tuple[str, str]]) -> str:
         "for today. Use exactly this format:\n"
         "TODAY'S FOCUS: 1-3 concrete priorities, ranked.\n"
         "SAY NO TO: one thing to drop or defer.\n"
-        "GROWTH ANGLE: one sentence on how today sharpens my craft, impact, or thought leadership.\n"
+        "GROWTH ANGLE: one sentence on how today sharpens my craft, thinking, or impact.\n"
         "Under 150 words, direct, no fluff.\n\n"
         f"MY ANSWERS:\n{convo}"
     )

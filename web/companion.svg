@@ -1,40 +1,59 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Baby Yoda companion">
-  <!-- background (fills the circular avatar crop) -->
-  <rect width="512" height="512" fill="#e9efe0"/>
-  <circle cx="256" cy="256" r="256" fill="#eef3e6"/>
+  <!-- green disc background, transparent corners (no white) -->
+  <circle cx="256" cy="256" r="252" fill="#9cb87f"/>
 
-  <!-- ears: big, signature, pointing out -->
-  <g stroke="#7f9e63" stroke-width="6" stroke-linejoin="round">
-    <path d="M150 250 C70 250 18 196 30 196 C70 200 120 214 150 250 Z" fill="#bcd79d"/>
-    <path d="M362 250 C442 250 494 196 482 196 C442 200 392 214 362 250 Z" fill="#bcd79d"/>
+  <!-- EARS (behind head) -->
+  <g stroke="#2f2a24" stroke-width="7" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M170 244 C104 246 58 150 34 160 C26 200 78 252 158 266 Z" fill="#bcd79d"/>
+    <path d="M342 244 C408 246 454 150 478 160 C486 200 434 252 354 266 Z" fill="#bcd79d"/>
   </g>
-  <path d="M150 248 C92 244 56 210 60 210 C92 214 128 224 150 248 Z" fill="#e3d6b4" stroke="none"/>
-  <path d="M362 248 C420 244 456 210 452 210 C420 214 384 224 362 248 Z" fill="#e3d6b4" stroke="none"/>
+  <path d="M160 242 C116 240 74 176 60 182 C66 210 104 240 152 248 Z" fill="#e7c6b6"/>
+  <path d="M352 242 C396 240 438 176 452 182 C446 210 408 240 360 248 Z" fill="#e7c6b6"/>
 
-  <!-- head -->
-  <ellipse cx="256" cy="262" rx="142" ry="150" fill="#bcd79d" stroke="#7f9e63" stroke-width="7"/>
-  <!-- forehead wrinkle hint -->
-  <path d="M196 168 Q256 150 316 168" fill="none" stroke="#9bbb7c" stroke-width="6" stroke-linecap="round" opacity="0.7"/>
+  <!-- HEAD -->
+  <path d="M256 92 C332 92 392 148 392 232 C392 314 332 364 256 364 C180 364 120 314 120 232 C120 148 180 92 256 92 Z"
+        fill="#bcd79d" stroke="#2f2a24" stroke-width="7"/>
 
-  <!-- eyes: large, dark, high-contrast -->
-  <g>
-    <ellipse cx="206" cy="270" rx="40" ry="47" fill="#241f18"/>
-    <ellipse cx="306" cy="270" rx="40" ry="47" fill="#241f18"/>
-    <circle cx="221" cy="252" r="12" fill="#fff" opacity="0.95"/>
-    <circle cx="321" cy="252" r="12" fill="#fff" opacity="0.95"/>
-    <circle cx="198" cy="284" r="5" fill="#fff" opacity="0.6"/>
-    <circle cx="298" cy="284" r="5" fill="#fff" opacity="0.6"/>
+  <!-- forehead wrinkles -->
+  <g fill="none" stroke="#8aa86c" stroke-width="5" stroke-linecap="round" opacity="0.85">
+    <path d="M212 146 Q256 134 300 146"/>
+    <path d="M222 166 Q256 157 290 166"/>
+  </g>
+  <!-- brow ridges -->
+  <g fill="#aecb8f" stroke="#2f2a24" stroke-width="5" stroke-linejoin="round">
+    <path d="M170 214 Q204 198 238 216 Q204 210 170 214 Z"/>
+    <path d="M274 216 Q308 198 342 214 Q308 210 274 216 Z"/>
   </g>
 
-  <!-- nose -->
-  <path d="M242 318 Q256 332 270 318 Q256 326 242 318 Z" fill="#8aa86c"/>
-  <circle cx="248" cy="318" r="3.2" fill="#5f7a48"/>
-  <circle cx="264" cy="318" r="3.2" fill="#5f7a48"/>
+  <!-- EYES -->
+  <ellipse cx="204" cy="250" rx="41" ry="46" fill="#1c1813" stroke="#2f2a24" stroke-width="4"/>
+  <ellipse cx="308" cy="250" rx="41" ry="46" fill="#1c1813" stroke="#2f2a24" stroke-width="4"/>
+  <circle cx="218" cy="233" r="12" fill="#fff"/>
+  <circle cx="322" cy="233" r="12" fill="#fff"/>
+  <circle cx="193" cy="262" r="5" fill="#fff" opacity="0.65"/>
+  <circle cx="297" cy="262" r="5" fill="#fff" opacity="0.65"/>
 
-  <!-- mouth -->
-  <path d="M232 348 Q256 364 280 348" fill="none" stroke="#6f8a52" stroke-width="6" stroke-linecap="round"/>
+  <!-- NOSE + MOUTH -->
+  <path d="M244 290 Q256 302 268 290" fill="none" stroke="#5f7a48" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="249" cy="289" r="3" fill="#3f5230"/>
+  <circle cx="263" cy="289" r="3" fill="#3f5230"/>
+  <path d="M234 314 Q256 330 278 314" fill="none" stroke="#2f2a24" stroke-width="5" stroke-linecap="round"/>
 
-  <!-- robe / collar -->
-  <path d="M150 430 C170 372 210 360 256 360 C302 360 342 372 362 430 Z" fill="#d8c6a0" stroke="#b7a47e" stroke-width="6" stroke-linejoin="round"/>
-  <path d="M256 360 L236 404 L256 420 L276 404 Z" fill="#c8b58c"/>
+  <!-- SCARF collar -->
+  <path d="M150 378 C178 344 212 334 256 334 C300 334 334 344 362 378 C372 398 358 416 330 414 C300 378 212 378 182 414 C154 416 140 398 150 378 Z"
+        fill="#ded2b4" stroke="#2f2a24" stroke-width="7" stroke-linejoin="round"/>
+
+  <!-- ROBE -->
+  <path d="M146 474 C146 414 196 390 256 390 C316 390 366 414 366 474 L366 512 L146 512 Z"
+        fill="#8a6f4e" stroke="#2f2a24" stroke-width="7" stroke-linejoin="round"/>
+  <path d="M256 394 L198 436 L218 512 L256 470 Z" fill="#7a6042" stroke="#2f2a24" stroke-width="5" stroke-linejoin="round"/>
+  <g fill="none" stroke="#5f4b33" stroke-width="3" stroke-linecap="round">
+    <path d="M300 440 L312 504"/>
+    <path d="M322 442 L336 502"/>
+  </g>
+  <!-- little hands -->
+  <g fill="#b6d196" stroke="#2f2a24" stroke-width="5" stroke-linejoin="round">
+    <path d="M196 452 q-16 6 -18 26 q14 -4 22 -10 Z"/>
+    <path d="M316 452 q16 6 18 26 q-14 -4 -22 -10 Z"/>
+  </g>
 </svg>

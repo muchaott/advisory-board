@@ -13,6 +13,7 @@ import re
 import agents as A
 import context as C
 import llm
+import tools
 
 DEEP_ENABLED = os.getenv("DEEP_THINKERS", "1") == "1"
 MAX_BOARD_TURNS = int(os.getenv("MAX_BOARD_TURNS", "7"))
@@ -93,14 +94,35 @@ def _content(user: str, images: list | None):
     return blocks or user
 
 
-def _ask_stream(agent: A.Agent, topic: str, transcript: list[tuple[str, str]], images: list | None = None):
-    """Yield text deltas for one agent's turn; appends its full reply to transcript."""
+def _emit_agent(agent: A.Agent, label: str, key: str, topic: str,
+                transcript: list[tuple[str, str]], images: list | None = None):
+    """Stream one agent's turn as UI events; agents may call tools (create docs).
+
+    Yields: token, tool (running/error), doc (created, with url), auth_needed.
+    Appends the agent's full text reply to the transcript.
+    """
     docs = C.agent_context() if agent.reads_docs else ""
     user = _build_user(agent, topic, transcript)
     buf = []
-    for delta in llm.stream(agent.system(docs), [{"role": "user", "content": _content(user, images)}], deep=_deep(agent)):
-        buf.append(delta)
-        yield delta
+    for ev in llm.stream_events(agent.system(docs), [{"role": "user", "content": _content(user, images)}],
+                                deep=_deep(agent), max_tokens=2200, tools=tools.TOOLS, run_tool=tools.run_tool):
+        if "text" in ev:
+            buf.append(ev["text"])
+            yield {"type": "token", "agent": label, "key": key, "text": ev["text"]}
+            continue
+        t = ev.get("tool") or {}
+        if t.get("status") == "running":
+            yield {"type": "tool", "agent": label, "key": key, "name": t.get("name"), "status": "running"}
+        elif t.get("status") == "done":
+            res = t.get("result") or {}
+            if res.get("ok") and res.get("url"):
+                yield {"type": "doc", "agent": label, "key": key, "url": res["url"]}
+            elif res.get("auth_needed"):
+                yield {"type": "auth_needed", "agent": label, "key": key,
+                       "service": res.get("service"), "message": res.get("error")}
+            else:
+                yield {"type": "tool", "agent": label, "key": key, "name": t.get("name"),
+                       "status": "error", "error": res.get("error")}
     transcript.append((agent.name, "".join(buf)))
 
 
@@ -127,8 +149,8 @@ def run_stream(mode: str, keys: list[str], topic: str, history: list | None = No
     elif mode == "chain":
         order = keys
         synth = False
-    else:  # board
-        order = [k for k in A.BOARD_ORDER if k != "mentor"]
+    else:  # board — every agent (built-in + custom) weighs in; the Mentor synthesizes
+        order = [a.key for a in A.roster() if a.key != "mentor"][:MAX_BOARD_TURNS]
         synth = True
 
     for i, key in enumerate(order):
@@ -138,25 +160,21 @@ def run_stream(mode: str, keys: list[str], topic: str, history: list | None = No
         yield {"type": "agent_start", "agent": agent.name, "key": agent.key, "deep": _deep(agent)}
         if i > 0 and transcript:
             yield {"type": "reacting_to", "agent": agent.name, "prior": transcript[-1][0]}
-        for delta in _ask_stream(agent, topic, transcript, images):
-            yield {"type": "token", "agent": agent.name, "key": agent.key, "text": delta}
+        yield from _emit_agent(agent, agent.name, agent.key, topic, transcript, images)
         yield {"type": "agent_done", "agent": agent.name, "key": agent.key}
 
     if synth:
         mentor = A.resolve("mentor")
         synth_topic = (
             f"{topic}\n\n[Synthesize the board's discussion above into a clear "
-            f"recommendation: the 1-2 highest-leverage moves for my growth as a designer and "
-            f"thought leader, and what to "
+            f"recommendation: the 1-2 highest-leverage moves for becoming a better designer, "
+            f"and what to "
             f"ignore. Name the tradeoffs.]"
         )
         label = mentor.name + " (synthesis)"
         yield {"type": "agent_start", "agent": label, "key": mentor.key, "deep": _deep(mentor)}
         yield {"type": "reacting_to", "agent": label, "prior": "the board"}
-        docs = C.agent_context()
-        user = _build_user(mentor, synth_topic, transcript)
-        for delta in llm.stream(mentor.system(docs), [{"role": "user", "content": _content(user, images)}], deep=_deep(mentor)):
-            yield {"type": "token", "agent": label, "key": mentor.key, "text": delta}
+        yield from _emit_agent(mentor, label, mentor.key, synth_topic, transcript, images)
         yield {"type": "agent_done", "agent": label, "key": mentor.key}
 
     yield {"type": "done"}
@@ -192,8 +210,8 @@ def boardroom(topic: str, order: list[str] | None = None) -> list[tuple[str, str
     mentor = A.resolve("mentor")
     synth_topic = (
         f"{topic}\n\n[Synthesize the board's discussion above into a clear "
-        f"recommendation: the 1-2 highest-leverage moves for my growth as a designer and "
-        f"thought leader, and what to ignore. Name the tradeoffs.]"
+        f"recommendation: the 1-2 highest-leverage moves for becoming a better designer, "
+        f"and what to ignore. Name the tradeoffs.]"
     )
     transcript.append((mentor.name + " (synthesis)", ask(mentor, synth_topic, transcript)))
     return transcript

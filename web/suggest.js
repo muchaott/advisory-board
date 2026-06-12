@@ -1,6 +1,6 @@
 "use strict";
 const host = (a, e) => { try { window.webkit.messageHandlers.host.postMessage(Object.assign({ action: a }, e || {})); } catch { /* not native */ } };
-let chips = [], loaded = false, loading = false, shown = false;
+let chips = [], loading = false, shown = false, currentTexts = [];
 
 async function load() {
   if (loading) return;
@@ -8,30 +8,38 @@ async function load() {
   try {
     const s = (await (await fetch("/api/suggestions")).json()).suggestions || [];
     render(s);
-    loaded = s.length > 0;  // only "done" once we actually have suggestions
   } catch { render([]); }
   finally { loading = false; }
 }
+
+function same(s) { return s.length === currentTexts.length && s.every((t, i) => t === currentTexts[i]); }
+
 function render(s) {
-  const c = document.getElementById("chips"); c.innerHTML = ""; chips = [];
-  if (!s.length) { const d = document.createElement("div"); d.className = "chip muted"; d.textContent = "Thinking about your day…"; c.append(d); return; }
+  if (!s.length) {                       // a refresh that returned nothing keeps the last good set
+    if (chips.length) return;
+    const c = document.getElementById("chips"); c.innerHTML = ""; chips = []; currentTexts = [];
+    const d = document.createElement("div"); d.className = "chip muted"; d.textContent = "Thinking about your day…"; c.append(d);
+    return;
+  }
+  if (same(s)) { if (shown) reveal(); return; }   // unchanged → don't rebuild (no flicker)
+  const c = document.getElementById("chips"); c.innerHTML = ""; chips = []; currentTexts = s.slice();
   s.forEach((txt) => {
     const d = document.createElement("div"); d.className = "chip"; d.textContent = txt;
     d.addEventListener("click", () => host("ask", { text: txt }));
     c.append(d); chips.push(d);
   });
-  if (shown) reveal();  // a load that finishes while the panel is open animates in
+  if (shown) reveal();
 }
 function reveal() {
   document.body.classList.add("show");
   chips.forEach((d, i) => setTimeout(() => d.classList.add("in"), 40 + i * 75));
 }
 
-// staggered reveal / reverse hide, driven by the native window on show/hide
+// driven by the native window on show/hide
 window.__in = () => {
   shown = true;
-  if (!loaded) load();  // self-heal: retry if the startup fetch raced or came back empty
-  reveal();
+  reveal();   // show whatever we have immediately…
+  load();     // …then refresh against today's current context
 };
 window.__out = () => {
   shown = false;

@@ -1,7 +1,7 @@
 # Advisory Board
 
-A local, always-available board of 6 AI agents that help me grow as a **designer
-and thought leader** at SoFi. Run it from the terminal, keep working docs in `./docs`, and ask the board
+A local, always-available board of AI agents that help me **become a better
+designer** at SoFi. Run it from the terminal, keep working docs in `./docs`, and ask the board
 for strategy, critique, project tracking, and exec-ready framing. Runs on the
 SoFi llm-proxy (Claude); no personal API key or billing.
 

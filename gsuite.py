@@ -264,6 +264,163 @@ def important_files_context(force: bool = False) -> str:
     return text
 
 
+def _u16(s: str) -> int:
+    """Length in UTF-16 code units (how Google Docs counts indices)."""
+    return len(s.encode("utf-16-le")) // 2
+
+
+_HEAD = {1: "HEADING_1", 2: "HEADING_2", 3: "HEADING_3", 4: "HEADING_4", 5: "HEADING_5", 6: "HEADING_6"}
+
+
+def _md_requests(md: str, base: int = 1) -> list:
+    """Turn light markdown into Docs batchUpdate requests (headings, bullets, **bold**, *italic*).
+
+    Text is inserted starting at index `base` (1 for a new doc; the doc's end for append).
+    """
+    import re
+    plain, text_styles, para_styles, bullets = "", [], [], []
+    for raw in md.split("\n"):
+        line, named, bullet = raw, None, False
+        m = re.match(r"^(#{1,6})\s+(.*)$", line)
+        if m:
+            named, line = _HEAD[len(m.group(1))], m.group(2)
+        elif re.match(r"^\s*[-*]\s+\S", line):
+            bullet, line = True, re.sub(r"^\s*[-*]\s+", "", line)
+        start = _u16(plain)
+        clean, i = "", 0
+        while i < len(line):
+            if line.startswith("**", i):
+                j = line.find("**", i + 2)
+                if j != -1:
+                    seg = line[i + 2:j]; s = start + _u16(clean); clean += seg
+                    text_styles.append((s, s + _u16(seg), "bold")); i = j + 2; continue
+            if line[i] == "*":
+                j = line.find("*", i + 1)
+                if j > i + 1:
+                    seg = line[i + 1:j]; s = start + _u16(clean); clean += seg
+                    text_styles.append((s, s + _u16(seg), "italic")); i = j + 1; continue
+            clean += line[i]; i += 1
+        plain += clean + "\n"
+        end = start + _u16(clean) + 1
+        if named:
+            para_styles.append((start, end, named))
+        if bullet:
+            bullets.append((start, end))
+    if not plain.strip():
+        return []
+    reqs = [{"insertText": {"location": {"index": base}, "text": plain}}]
+    for s, e, kind in text_styles:
+        reqs.append({"updateTextStyle": {"range": {"startIndex": base + s, "endIndex": base + e},
+                     "textStyle": {"bold": True} if kind == "bold" else {"italic": True},
+                     "fields": kind}})
+    for s, e, named in para_styles:
+        reqs.append({"updateParagraphStyle": {"range": {"startIndex": base + s, "endIndex": base + e},
+                     "paragraphStyle": {"namedStyleType": named}, "fields": "namedStyleType"}})
+    for s, e in bullets:  # last: bullets shouldn't shift earlier ranges
+        reqs.append({"createParagraphBullets": {"range": {"startIndex": base + s, "endIndex": base + e},
+                     "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE"}})
+    return reqs
+
+
+def create_doc(title: str, text: str = "") -> str | None:
+    """Create a Google Doc with `text` (light markdown) as its body. Returns the URL, or None."""
+    doc = call("docs", "createDocument", {"title": (title or "Untitled").strip()[:200]})
+    if not isinstance(doc, dict) or "error" in doc or not doc.get("documentId"):
+        return None
+    did = doc["documentId"]
+    if (text or "").strip():
+        try:
+            reqs = _md_requests(text)
+        except Exception:
+            reqs = [{"insertText": {"location": {"index": 1}, "text": text}}]
+        up = call("docs", "batchUpdateDocument", {"documentId": did, "requests": reqs})
+        if not isinstance(up, dict) or "error" in up:   # formatting failed → fall back to plain text
+            call("docs", "batchUpdateDocument", {"documentId": did,
+                 "requests": [{"insertText": {"location": {"index": 1}, "text": text}}]})
+    return f"https://docs.google.com/document/d/{did}/edit"
+
+
+def create_event(summary: str, start: str, end: str, description: str = "",
+                 location: str = "", attendees: list | None = None, timezone: str = "") -> str | None:
+    """Create a Google Calendar event. start/end are RFC3339 datetimes. Returns the event URL, or None."""
+    def _dt(x):
+        return {"dateTime": x, **({"timeZone": timezone} if timezone else {})}
+    body = {"calendarId": "primary", "summary": summary or "(no title)", "start": _dt(start), "end": _dt(end)}
+    if description:
+        body["description"] = description
+    if location:
+        body["location"] = location
+    if attendees:
+        body["attendees"] = [{"email": e} for e in attendees]
+    r = call("calendar", "createEvent", body)
+    if not isinstance(r, dict) or "error" in r or not (r.get("id") or r.get("htmlLink")):
+        return None
+    return r.get("htmlLink") or "https://calendar.google.com/calendar"
+
+
+def append_doc(doc_id: str, text: str) -> str | None:
+    """Append `text` (light markdown) to the end of an existing Google Doc. Returns URL, or None."""
+    doc = call("docs", "getDocument", {"documentId": doc_id})
+    if not isinstance(doc, dict) or "error" in doc or not doc.get("documentId"):
+        return None
+    content = doc.get("body", {}).get("content", [])
+    idx = max(1, (content[-1].get("endIndex", 2) - 1) if content else 1)
+    try:
+        reqs = _md_requests("\n" + text, base=idx)
+    except Exception:
+        reqs = [{"insertText": {"location": {"index": idx}, "text": "\n" + text}}]
+    up = call("docs", "batchUpdateDocument", {"documentId": doc_id, "requests": reqs})
+    if not isinstance(up, dict) or "error" in up:
+        call("docs", "batchUpdateDocument", {"documentId": doc_id,
+             "requests": [{"insertText": {"location": {"index": idx}, "text": "\n" + text}}]})
+    return f"https://docs.google.com/document/d/{doc_id}/edit"
+
+
+def send_email(to: str, subject: str, body: str) -> bool:
+    """Send an email as the authenticated user via Gmail. True on success."""
+    import base64
+    from email.message import EmailMessage
+    if not to:
+        return False
+    msg = EmailMessage()
+    msg["To"] = to
+    msg["Subject"] = subject or ""
+    msg.set_content(body or "")
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    r = call("gmail", "gmailUsersMessagesSend", {"userId": "me", "raw": raw})
+    return isinstance(r, dict) and bool(r.get("id"))
+
+
+def create_sheet(title: str, rows: list | None = None) -> str | None:
+    """Create a Google Sheet (optionally seed `rows`, a 2-D list). Returns URL, or None."""
+    r = call("sheets", "createSpreadsheet", {"properties": {"title": (title or "Untitled").strip()[:200]}})
+    if not isinstance(r, dict) or "error" in r or not r.get("spreadsheetId"):
+        return None
+    sid = r["spreadsheetId"]
+    if rows:
+        call("sheets", "updateValues", {"spreadsheetId": sid, "range": "Sheet1!A1",
+             "valueInputOption": "RAW", "values": rows})
+    return r.get("spreadsheetUrl") or f"https://docs.google.com/spreadsheets/d/{sid}/edit"
+
+
+def search_drive(query: str, n: int = 10) -> list | None:
+    """Find Drive files by name. Returns [{id,name,mimeType,url}], or None on auth/error."""
+    q = (query or "").replace("\\", "").replace("'", "\\'")
+    res = call("drive", "driveFilesList", {
+        "q": f"name contains '{q}' and trashed = false",
+        "fields": "files(id,name,mimeType,webViewLink,modifiedTime)",
+        "pageSize": max(1, min(n, 25)), "orderBy": "modifiedTime desc",
+    })
+    if not isinstance(res, dict) or "error" in res:
+        return None
+    out = []
+    for f in res.get("files", []) or []:
+        out.append({"id": f.get("id"), "name": f.get("name"),
+                    "mimeType": (f.get("mimeType") or "").split(".")[-1],
+                    "url": f.get("webViewLink") or ""})
+    return out
+
+
 def status() -> dict:
     """Which Google services have a usable token right now."""
     return {k: (_creds(k)[0] is not None) for k in SERVERS}

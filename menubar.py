@@ -55,6 +55,8 @@ class MiniBridge(NSObject):
                 self._app._move_chat(float(body.objectForKey_("dx") or 0), float(body.objectForKey_("dy") or 0))
             elif action == "ask":
                 self._app._ask_from_sug(str(body.objectForKey_("text") or ""))
+            elif action == "openURL":
+                self._app._open_url(str(body.objectForKey_("url") or ""))
             elif action == "orbHoverIn":
                 self._app._hover("orb", True)
             elif action == "orbHoverOut":
@@ -167,7 +169,11 @@ class BoardApp(rumps.App):
         """A rumps app has no main menu, so ⌘C/⌘V/⌘A/⌘Z don't bind to anything.
         Install a standard Edit menu (actions go down the responder chain to the
         focused WKWebView) so copy/paste/select-all/undo work in the chat."""
-        from AppKit import NSMenu, NSMenuItem, NSApp
+        from AppKit import NSMenu, NSMenuItem, NSApp, NSImage
+        if os.path.exists(ICON):
+            img = NSImage.alloc().initWithContentsOfFile_(ICON)
+            if img:
+                NSApp.setApplicationIconImage_(img)  # Dock icon = Yoda
         main = NSMenu.alloc().init()
 
         app_item = NSMenuItem.alloc().init(); main.addItem_(app_item)
@@ -202,11 +208,30 @@ class BoardApp(rumps.App):
     # ---- native window (WKWebView, in-process) ----
     def show_window(self, _=None):
         from AppKit import NSApp
+        if self._sug_visible:
+            self._hide_sug()       # dismiss the options popover when the board opens
         if self._window is None:
             self._window = self._make_window()
         self._window.makeKeyAndOrderFront_(None)
         NSApp.activateIgnoringOtherApps_(True)
         self._push_avatar_state()  # sync the board's show/hide-avatar button
+        if self._webview:           # pick up anything said in the mini chat
+            self._webview.evaluateJavaScript_completionHandler_(
+                "window.__reloadConvos && window.__reloadConvos()", None)
+
+    def _open_url(self, url):
+        if not url:
+            return
+        from AppKit import NSWorkspace
+        from Foundation import NSURL
+        NSWorkspace.sharedWorkspace().openURL_(NSURL.URLWithString_(url))
+
+    def _toggle_board(self):
+        """Double-click the avatar: open the board, or close it if already open."""
+        if self._window is not None and self._window.isVisible():
+            self._window.orderOut_(None)
+        else:
+            self.show_window()
 
     def _make_window(self):
         from AppKit import (NSWindow, NSBackingStoreBuffered, NSWindowStyleMaskTitled,
@@ -299,6 +324,10 @@ class BoardApp(rumps.App):
             self._enlarge_chat()
         elif action == "toggleMini":
             self._toggle_mini()
+        elif action == "toggleSug":
+            self._toggle_sug()
+        elif action == "toggleBoard":
+            self._toggle_board()
 
     # ---- chat: a separate window; the avatar always stays put ----
     def _open_chat(self, prompt=None):
@@ -313,24 +342,41 @@ class BoardApp(rumps.App):
         if self._mini_wv:
             self._mini_wv.evaluateJavaScript_completionHandler_("window.__clearBadge && window.__clearBadge()", None)
         if prompt and self._chat_wv:
-            self._chat_wv.evaluateJavaScript_completionHandler_("window.__ask(" + json.dumps(prompt) + ")", None)
+            self._inject_prompt(prompt)
+        elif self._chat_wv:   # reopened without a prompt → resume the synced conversation
+            self._chat_wv.evaluateJavaScript_completionHandler_("window.__loadThread && window.__loadThread()", None)
+
+    def _inject_prompt(self, prompt, attempt=0):
+        """Send `prompt` into the chat, retrying until chat.js has defined __ask.
+
+        A freshly-created chat webview hasn't loaded chat.js yet, so a one-shot
+        eval would no-op and the suggestion would be lost. Retry for ~3s.
+        """
+        if not self._chat_wv:
+            return
+        js = "window.__ask ? (window.__ask(" + json.dumps(prompt) + "), 'ok') : ''"
+
+        def done(result, error):
+            if str(result) != "ok" and attempt < 20:
+                threading.Timer(0.15, lambda: self._on_main(
+                    lambda: self._inject_prompt(prompt, attempt + 1))).start()
+
+        self._chat_wv.evaluateJavaScript_completionHandler_(js, done)
 
     def _close_chat(self):
         if self._chat:
             self._chat.orderOut_(None)
 
     def _enlarge_chat(self):
-        """Open the full board on the chat's conversation, then close the chat.
+        """Open the full board on the Career Mentor view, then close the chat.
 
-        chat.js has already POSTed the conversation to /api/handoff. A freshly
-        created board adopts it in init(); an already-open board is nudged to
-        adopt it now via JS.
+        The chat continuously syncs to that view (data/conversations.json), so
+        the board just reloads it and switches to it.
         """
-        existed = self._window is not None
         self.show_window()
-        if existed and self._webview:
+        if self._webview:
             self._webview.evaluateJavaScript_completionHandler_(
-                "window.__adoptHandoff && window.__adoptHandoff()", None)
+                "window.__openView && window.__openView('single:mentor')", None)
         self._close_chat()
 
     def _position_chat(self):
@@ -359,31 +405,22 @@ class BoardApp(rumps.App):
             if self._sug_wv:
                 self._sug_wv.evaluateJavaScript_completionHandler_("window.__out && window.__out()", None)
 
-    # ---- hover → separate suggestions window (avatar window never changes) ----
-    def _hover(self, who, on):
-        # Showing is triggered by the orb reporting hover-in; hiding is handled by
-        # _hover_poll (polling the real cursor against both windows is far more
-        # reliable than DOM enter/leave events crossing two separate windows).
-        if who == "orb" and on and not self._sug_visible:
+    # ---- options popover (click-toggled; the avatar window never changes) ----
+    def _toggle_sug(self):
+        if self._sug is None:
+            return
+        if self._sug_visible:
+            self._hide_sug()
+        else:
             self._show_sug()
 
+    def _hover(self, who, on):
+        # Hover no longer shows the popover — it's click-toggled (_toggle_sug).
+        pass
+
     def _hover_poll(self, _):
-        if not self._sug_visible or not self._mini or not self._sug:
-            return
-        from AppKit import NSEvent
-        p = NSEvent.mouseLocation()
-
-        def over(win, pad=14):
-            f = win.frame()
-            return (f.origin.x - pad <= p.x <= f.origin.x + f.size.width + pad and
-                    f.origin.y - pad <= p.y <= f.origin.y + f.size.height + pad)
-
-        if over(self._mini) or over(self._sug):
-            self._leave_ticks = 0
-        else:
-            self._leave_ticks += 1
-            if self._leave_ticks >= 2:   # ~0.24s outside both → dismiss
-                self._hide_sug()
+        # Disabled: the popover persists until clicked again, not on mouse-leave.
+        return
 
     def _position_sug(self):
         of = self._mini.frame()

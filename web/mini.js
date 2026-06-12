@@ -7,10 +7,6 @@ function setUnread(n) { unread = Math.max(0, n); const b = $("#badge"); b.textCo
 window.__badge = (n) => setUnread(n);
 window.__clearBadge = () => setUnread(0);
 
-// hover (orb reports; native shows the suggestions window)
-$("#avatar").addEventListener("mouseenter", () => { if (!dragging) host("orbHoverIn"); });
-$("#avatar").addEventListener("mouseleave", () => host("orbHoverOut"));
-
 // drag the avatar anywhere
 $("#avatar").addEventListener("mousedown", (e) => { if (e.button !== 0) return; dragging = true; moved = false; lastX = e.screenX; lastY = e.screenY; e.preventDefault(); });
 document.addEventListener("mousemove", (e) => {
@@ -18,7 +14,15 @@ document.addEventListener("mousemove", (e) => {
   const dx = e.screenX - lastX, dy = e.screenY - lastY;
   if (dx || dy) { if (Math.abs(dx) + Math.abs(dy) > 2) moved = true; lastX = e.screenX; lastY = e.screenY; host("move", { dx, dy }); }
 });
-document.addEventListener("mouseup", (e) => { if (!dragging) return; dragging = false; if (!moved && e.button === 0) host("board"); });
+// single click → toggle the options popover; double click → open the full board
+let clickTimer = null;
+document.addEventListener("mouseup", (e) => {
+  if (!dragging) return;
+  dragging = false;
+  if (moved || e.button !== 0) return;
+  if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; host("toggleBoard"); }  // 2nd click within window = double → toggle board
+  else { clickTimer = setTimeout(() => { clickTimer = null; host("toggleSug"); }, 260); }
+});
 
 // chat button + right-click
 $("#chatbtn").addEventListener("click", (e) => { e.stopPropagation(); host("openChat"); });

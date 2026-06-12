@@ -23,7 +23,8 @@
     <!-- LEFT: agents -->
     <aside class="rail">
       <div class="rail-section grow">
-        <div class="rail-label">The board</div>
+        <div class="rail-label rail-label-row"><span>The board</span>
+          <button class="rail-add" id="newAgent" title="Add an agent">＋ Agent</button></div>
         <div class="agents" id="agents"></div>
       </div>
     </aside>
@@ -60,6 +61,32 @@
     <div class="modal">
       <div class="modal-head"><span id="modalTitle"></span><button id="modalClose">✕</button></div>
       <pre id="modalBody"></pre>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="agentModal" hidden>
+    <div class="modal agent-editor">
+      <div class="modal-head"><span id="agentModalTitle">New agent</span><button id="agentModalClose">✕</button></div>
+      <div class="ae-body">
+        <label>Name<input id="aeName" type="text" placeholder="The Accessibility Lead" /></label>
+        <label>Goal <span class="ae-hint">one line, shown on the card</span>
+          <input id="aeGoal" type="text" placeholder="Catch accessibility issues before eng." /></label>
+        <label>Instructions <span class="ae-hint">the persona — how it should think and respond</span>
+          <textarea id="aePrompt" rows="5" placeholder="You are a WCAG expert who audits flows for contrast, focus order, and screen-reader semantics…"></textarea></label>
+        <label>Knowledge <span class="ae-hint">context it always has — paste specs, principles, links (like a Gem)</span>
+          <textarea id="aeKb" rows="6" placeholder="Team a11y bar: WCAG 2.2 AA. Min target 44×44. Never rely on color alone…"></textarea></label>
+        <div class="ae-row">
+          <label class="ae-color">Color <input id="aeColor" type="color" value="#7c8cf8" /></label>
+          <label class="ae-check"><input id="aeReads" type="checkbox" /> Reads my shared context</label>
+          <label class="ae-check"><input id="aeDeep" type="checkbox" /> Deep thinking (Opus)</label>
+        </div>
+      </div>
+      <div class="ae-actions">
+        <button class="btn ghost" id="aeDelete" hidden>Delete</button>
+        <span class="ae-spacer"></span>
+        <button class="btn ghost" id="aeCancel">Cancel</button>
+        <button class="btn" id="aeSave">Save</button>
+      </div>
     </div>
   </div>
 
