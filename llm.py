@@ -49,6 +49,17 @@ def _client(api_key: str) -> anthropic.Anthropic:
     return anthropic.Anthropic(api_key=api_key, base_url=BASE_URL)
 
 
+def _is_key_error(e: Exception) -> bool:
+    """True if an API error looks like an expired/invalid proxy key (worth refreshing)."""
+    if isinstance(e, anthropic.AuthenticationError):
+        return True
+    code = getattr(e, "status_code", None)
+    if code in (401, 403):
+        return True
+    msg = str(getattr(e, "message", "") or e).lower()
+    return "expired" in msg or ("invalid" in msg and "key" in msg)
+
+
 def _ensure_key() -> str:
     key = os.getenv("ANTHROPIC_API_KEY", "").strip()
     if not key:
@@ -77,13 +88,8 @@ def complete(system: str, messages: list[dict], *, deep: bool = False,
                 temperature=temperature,
             )
             return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
-        except anthropic.AuthenticationError:
-            if attempt == 0:
-                key = _refresh_key() or key
-                continue
-            raise
         except anthropic.APIStatusError as e:
-            if attempt == 0 and e.status_code in (401, 403):
+            if attempt == 0 and _is_key_error(e):
                 key = _refresh_key() or key
                 continue
             raise
@@ -108,13 +114,8 @@ def stream(system: str, messages: list[dict], *, deep: bool = False,
                 for text in s.text_stream:
                     yield text
             return
-        except anthropic.AuthenticationError:
-            if attempt == 0:
-                key = _refresh_key() or key
-                continue
-            raise
         except anthropic.APIStatusError as e:
-            if attempt == 0 and e.status_code in (401, 403):
+            if attempt == 0 and _is_key_error(e):
                 key = _refresh_key() or key
                 continue
             raise
@@ -148,13 +149,8 @@ def stream_events(system: str, messages: list[dict], *, deep: bool = False,
                         yield {"text": delta}
                     final = s.get_final_message()
                 break
-            except anthropic.AuthenticationError:
-                if attempt == 0:
-                    key = _refresh_key() or key
-                    continue
-                raise
             except anthropic.APIStatusError as e:
-                if attempt == 0 and e.status_code in (401, 403):
+                if attempt == 0 and _is_key_error(e):
                     key = _refresh_key() or key
                     continue
                 raise

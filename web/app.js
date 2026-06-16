@@ -61,7 +61,7 @@ async function loadAgents() {
 async function init() {
   await loadAgents();
   try { state.convos = (await (await fetch("/api/conversations")).json()) || {}; } catch { state.convos = {}; }
-  loadActivity();
+  loadRecommended();
   bindUI();
   // Career Mentor is the default agent for a new chat (it routes to specialists).
   const def = state.agents.find((a) => a.key === DEFAULT_AGENT) || state.agents[0];
@@ -346,7 +346,7 @@ async function ask(mode, keys, message, opts = {}) {
   if (opts.showUser !== false) {
     const disp = opts.display ?? message;
     domUser(disp, opts.imageDataUrl, opts.quote);
-    arr.push({ t: "user", text: disp, image: opts.imageDataUrl || null, quote: opts.quote || null });
+    arr.push({ t: "user", text: disp, image: opts.imageDataUrl || null, quote: opts.quote || null, ts: Date.now() });
     scrollDown();  // jump to the message you just sent
   } else clearEmpty();
 
@@ -391,7 +391,7 @@ async function ask(mode, keys, message, opts = {}) {
         else if (ev.type === "tool" && ev.status === "running") { /* tool in progress; text follows */ }
         else if (ev.type === "agent_done") {
           body?.classList.remove("streaming"); markSpeaking(ev.key, false);
-          if (body) arr.push({ t: "agent", key: ev.key, name: ev.agent, text: body.textContent, reacting });
+          if (body) arr.push({ t: "agent", key: ev.key, name: ev.agent, text: body.textContent, reacting, ts: Date.now() });
         }
       }
     }
@@ -400,7 +400,6 @@ async function ask(mode, keys, message, opts = {}) {
   } finally {
     startedKeys.forEach((k) => markSpeaking(k, false));
     setBusy(vk, false);
-    loadActivity();
     saveConvos();
   }
 }
@@ -591,11 +590,79 @@ function bragPanel() {
   }).catch(() => { sugWrap.innerHTML = ""; });
 }
 
+// ---------- rail tabs (Chat / History) ----------
+function setTab(name) {
+  document.querySelectorAll(".rail-tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+  $("#tab-chat").hidden = name !== "chat";
+  $("#tab-history").hidden = name !== "history";
+  if (name === "history") renderHistory();
+}
+
+function viewTitle(vk) {
+  if (vk === "board") return "The Whole Board";
+  if (vk === "chain") return "Chain";
+  if (vk.startsWith("single:")) return shortName(vk.slice("single:".length));
+  return vk;
+}
+function convoTs(turns) { let m = 0; for (const t of turns) if (t.ts && t.ts > m) m = t.ts; return m; }
+function lastSnippet(turns) {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const t = turns[i];
+    if (t.t === "user" || t.t === "agent") return (t.t === "user" ? "You: " : "") + (t.text || "").slice(0, 90);
+  }
+  return "";
+}
+function renderHistory() {
+  const wrap = $("#history"); wrap.innerHTML = "";
+  const entries = Object.entries(state.convos)
+    .filter(([, turns]) => Array.isArray(turns) && turns.some((t) => t.t === "user" || t.t === "agent"))
+    .sort((a, b) => convoTs(b[1]) - convoTs(a[1]));
+  if (!entries.length) { wrap.append(el("div", "tl-empty", "No past chats yet. Start one from the Chat tab.")); return; }
+  for (const [vk, turns] of entries) {
+    const item = el("div", "hist-item");
+    const k = vk.startsWith("single:") ? vk.slice("single:".length) : null;
+    item.style.setProperty("--ac", k ? color(k) : "#7c8cf8");
+    item.append(el("div", "hist-title", viewTitle(vk)));
+    item.append(el("div", "hist-snip", lastSnippet(turns)));
+    item.onclick = () => {
+      openHistory(vk);
+      wrap.querySelectorAll(".hist-item").forEach((x) => x.classList.toggle("active", x === item));
+    };
+    wrap.append(item);
+  }
+}
+function openHistory(vk) {
+  if (vk === "board") { state.mode = "board"; state.selected = []; }
+  else if (vk === "chain") { state.mode = "chain"; state.selected = []; }
+  else if (vk.startsWith("single:")) { state.mode = "single"; state.selected = [vk.slice("single:".length)]; }
+  // stay on the History tab; just load the conversation in the center
+  document.querySelectorAll(".hist-item").forEach((it) => it.classList.remove("active"));
+  paintSelection(); renderConvo(); updateComposerEnabled(); focusComposer();
+}
+
+// ---------- recommended actions (same source as the avatar's suggestions) ----------
+async function loadRecommended() {
+  const wrap = $("#recommended"); if (!wrap) return;
+  if (!wrap.children.length) wrap.append(el("div", "tl-empty", "Thinking about your day…"));
+  try {
+    const s = (await (await fetch("/api/suggestions")).json()).suggestions || [];
+    wrap.innerHTML = "";
+    if (!s.length) { wrap.append(el("div", "tl-empty", "No suggestions right now.")); return; }
+    s.forEach((txt) => {
+      const chip = el("div", "rec-chip", txt);
+      chip.title = "Send this to the board";
+      chip.onclick = () => { const i = $("#input"); i.value = txt; autoGrow(i); onSubmit(); };
+      wrap.append(chip);
+    });
+  } catch { /* keep prior */ }
+}
+
 // ---------- activity ----------
 async function loadActivity() {
+  const tl = $("#timeline"); if (!tl) return;   // Activity panel removed
   try {
     const items = await (await fetch("/api/activity")).json();
-    const tl = $("#timeline"); tl.innerHTML = "";
+    tl.innerHTML = "";
     if (!items.length) { tl.append(el("div", "tl-empty", "No activity yet. Brag, sync, or run a review.")); return; }
     items.forEach((it) => {
       const card = el("div", `tl-item tl-kind-${it.kind}`);
@@ -702,6 +769,9 @@ function bindUI() {
   }));
   $("#modalClose").onclick = () => ($("#modal").hidden = true);
   $("#modal").onclick = (e) => { if (e.target.id === "modal") $("#modal").hidden = true; };
+
+  // rail tabs
+  document.querySelectorAll(".rail-tab").forEach((b) => (b.onclick = () => setTab(b.dataset.tab)));
 
   // agent editor
   $("#newAgent").onclick = () => openAgentEditor(null);

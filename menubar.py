@@ -136,7 +136,10 @@ class BoardApp(rumps.App):
         from datetime import datetime
         now = datetime.now()
         today = now.strftime("%Y-%m-%d")
-        if now.hour == 9 and self._last_morning != today:
+        # Run once per day at/after 9am — catches up if the app started late.
+        # Guarded by the brief file so a restart later in the day won't regenerate it.
+        brief_done = os.path.exists(os.path.join(ROOT, "reviews", f"morning-{today}.md"))
+        if now.hour >= 9 and self._last_morning != today and not brief_done:
             self._last_morning = today
             threading.Thread(target=self._morning, daemon=True).start()
 

@@ -13,10 +13,13 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-REVIEWS_DIR = Path(__file__).resolve().parent / "reviews"
+ROOT = Path(__file__).resolve().parent
+REVIEWS_DIR = ROOT / "reviews"
+CONV_PATH = ROOT / "data" / "conversations.json"
 
 import agents as A
 import context as C
@@ -98,11 +101,36 @@ def brief() -> str:
                         deep=O._deep(pm), max_tokens=500, temperature=0.5)
 
 
+def _add_brief_to_mentor_history(text: str) -> None:
+    """Append today's brief as a Career Mentor turn in the shared conversation
+    (single:mentor), so it shows in the chat, the board's Mentor view, and History."""
+    try:
+        today = datetime.now().strftime("%Y-%m-%d")
+        data = {}
+        if CONV_PATH.exists():
+            data = json.loads(CONV_PATH.read_text(encoding="utf-8")) or {}
+        vk = "single:mentor"
+        turns = data.get(vk) or []
+        if any(isinstance(t, dict) and t.get("morning") == today for t in turns):
+            return  # already added today
+        turns.append({"t": "agent", "key": "mentor", "name": A.resolve("mentor").name,
+                      "text": "☀ Morning brief\n\n" + text, "morning": today,
+                      "ts": int(time.time() * 1000)})
+        data[vk] = turns
+        CONV_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = CONV_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data), encoding="utf-8")
+        tmp.replace(CONV_PATH)
+    except Exception:
+        pass
+
+
 def write_brief() -> str:
-    """Generate today's brief and save it to reviews/morning-<date>.md."""
+    """Generate today's brief, save it, and add it to the Mentor's chat history."""
     out = brief()
     REVIEWS_DIR.mkdir(exist_ok=True)
     (REVIEWS_DIR / f"morning-{datetime.now().strftime('%Y-%m-%d')}.md").write_text(out, encoding="utf-8")
+    _add_brief_to_mentor_history(out)
     return out
 
 

@@ -20,7 +20,7 @@ AUTH_HOWTO = {
                      "in Claude Code (/mcp → google-sheets), then retry.",
     "google-calendar": "Google Calendar access — its token has likely expired. Reconnect Google "
                        "in Claude Code (/mcp → google-calendar), then retry.",
-    "slack": "Slack access — run `sofi-mcp-cli mcp reconnect slack` in your terminal to authorize, then retry.",
+    "slack": "Slack access — its token has likely expired. Reconnect Slack in Claude Code (/mcp → slack), then retry.",
     "gmail": "Gmail access — its token has likely expired. Reconnect Google in Claude Code (/mcp → gmail), then retry.",
     "google-drive": "Google Drive access — its token has likely expired. Reconnect Google in Claude Code (/mcp → google-drive), then retry.",
 }
@@ -138,6 +138,16 @@ TOOLS = [
         },
     },
     {
+        "name": "search_slack",
+        "description": "Search the user's Slack for messages. Supports modifiers: in:channel, from:@user, "
+                       "after:YYYY-MM-DD, before:YYYY-MM-DD. Use to read/find Slack discussion on demand.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"query": {"type": "string", "description": "Search query (e.g. 'AI tips in:rdx-ai-tips')"}},
+            "required": ["query"],
+        },
+    },
+    {
         "name": "send_email",
         "description": "Send an email as the user via Gmail. ONLY use when the user explicitly asks to "
                        "send an email — confirm the recipient, subject, and body first.",
@@ -215,6 +225,10 @@ def run_tool(name: str, inp: dict) -> dict:
     if name == "send_email":
         ok = gsuite.send_email(inp.get("to") or "", inp.get("subject") or "", inp.get("body") or "")
         return {"ok": True, "to": inp.get("to")} if ok else _auth("gmail")
+
+    if name == "search_slack":
+        text = slack.search(inp.get("query", ""))
+        return {"ok": True, "text": text} if text is not None else _auth("slack")
 
     if name == "send_slack_message":
         ok = slack.send(inp.get("channel") or "", inp.get("text") or "")

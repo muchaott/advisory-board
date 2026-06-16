@@ -210,11 +210,12 @@ async function loadBrief() {
   if (briefShown) return;
   try { const b = await (await fetch("/api/morning-brief")).json(); if (b && b.text) { add("bot", b.text); briefShown = true; } } catch { /* ignore */ }
 }
-window.__newBrief = () => { loadBrief(); };
+// a new brief is a Mentor turn in the synced thread now — just reload it
+window.__newBrief = () => { loadThread(); };
 
 (async () => {
   await loadColors();
-  const had = await loadThread();   // resume the synced conversation if there is one
-  if (!had) { add("bot", "Hey — what are we working on?"); await loadBrief(); }
+  const had = await loadThread();   // resume the synced conversation (includes today's brief)
+  if (!had) add("bot", "Hey — what are we working on?");
   setTimeout(() => $("#input").focus(), 80);
 })();

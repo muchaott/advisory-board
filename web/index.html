@@ -20,12 +20,20 @@
   </header>
 
   <main class="layout">
-    <!-- LEFT: agents -->
+    <!-- LEFT: agents / history -->
     <aside class="rail">
-      <div class="rail-section grow">
+      <div class="rail-tabs">
+        <button class="rail-tab active" data-tab="chat">Chat</button>
+        <button class="rail-tab" data-tab="history">History</button>
+      </div>
+      <div class="rail-section grow" id="tab-chat">
         <div class="rail-label rail-label-row"><span>The board</span>
           <button class="rail-add" id="newAgent" title="Add an agent">＋ Agent</button></div>
         <div class="agents" id="agents"></div>
+      </div>
+      <div class="rail-section grow" id="tab-history" hidden>
+        <div class="rail-label">Past chats — click to resume</div>
+        <div class="history" id="history"></div>
       </div>
     </aside>
 
@@ -50,10 +58,10 @@
       <div class="drop-hint">Drop an image to add context</div>
     </section>
 
-    <!-- RIGHT: activity -->
+    <!-- RIGHT: recommended -->
     <aside class="activity">
-      <div class="rail-label">Activity</div>
-      <div class="timeline" id="timeline"></div>
+      <div class="rail-label">Recommended — for today</div>
+      <div class="recommended" id="recommended"></div>
     </aside>
   </main>
 
